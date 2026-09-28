@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Java 项目分阶段学习与开发计划 · 含 GitHub 开源项目对比分析</title>
+<style>
+  :root{
+    --bg:#f7f8fa; --card:#fff; --ink:#1b1f24; --ink2:#4a5260; --ink3:#7b8494;
+    --line:#e4e7ec; --line2:#eef0f4; --accent:#1f5fd0; --accent-bg:#eef3fd;
+    --p0:#c0392b; --p0-bg:#fdecea;
+    --p1:#b9770e; --p1-bg:#fdf4e3;
+    --p2:#1e7a4d; --p2-bg:#e9f7ef;
+    --p3:#5b4bab; --p3-bg:#f0edfa;
+    --warn:#a34a00; --warn-bg:#fff6e8;
+    --ok:#1e7a4d; --ok-bg:#e9f7ef;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:0 20px 80px; background:var(--bg); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    font-size:15px; line-height:1.72; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1100px; margin:0 auto}
+  header{padding:54px 0 26px; border-bottom:2px solid var(--ink); margin-bottom:34px}
+  header h1{margin:0 0 10px; font-size:30px; line-height:1.32; letter-spacing:-.4px}
+  header .sub{color:var(--ink2); font-size:15px}
+  header .meta{margin-top:16px; font-size:13px; color:var(--ink3); display:flex; gap:20px; flex-wrap:wrap}
+  header .meta b{color:var(--ink2); font-weight:600}
+
+  h2{font-size:22px; margin:52px 0 16px; padding-bottom:10px; border-bottom:1px solid var(--line); letter-spacing:-.2px}
+  h2 .num{color:var(--accent); font-weight:700; margin-right:8px}
+  h3{font-size:17.5px; margin:34px 0 12px}
+  h4{font-size:15px; margin:22px 0 8px; color:var(--ink2)}
+  p{margin:10px 0}
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  code{background:#f0f2f5; padding:1.5px 5px; border-radius:4px;
+    font-family:"SFMono-Regular",Consolas,Menlo,monospace; font-size:13px}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px 22px; margin:16px 0}
+
+  table{width:100%; border-collapse:collapse; margin:14px 0; font-size:13.5px; background:var(--card)}
+  th{text-align:left; padding:10px 12px; background:#f2f4f7; border-bottom:2px solid var(--line);
+     font-weight:600; font-size:12.5px; color:var(--ink2); white-space:nowrap}
+  td{padding:10px 12px; border-bottom:1px solid var(--line2); vertical-align:top}
+  tr:last-child td{border-bottom:none}
+  tbody tr:hover{background:#fafbfc}
+  td.num{font-variant-numeric:tabular-nums; white-space:nowrap; color:var(--ink2)}
+  .repo{font-family:"SFMono-Regular",Consolas,Menlo,monospace; font-size:12.5px; word-break:break-all}
+  .win{background:#f2fbf5 !important}
+  .win td:first-child{border-left:3px solid var(--ok)}
+  .lose td:first-child{border-left:3px solid var(--line)}
+
+  .tag{display:inline-block; padding:1px 7px; border-radius:4px; font-size:11.5px; font-weight:600; white-space:nowrap; line-height:1.6}
+  .t-p0{background:var(--p0-bg); color:var(--p0)}
+  .t-p1{background:var(--p1-bg); color:var(--p1)}
+  .t-p2{background:var(--p2-bg); color:var(--p2)}
+  .t-p3{background:var(--p3-bg); color:var(--p3)}
+  .t-warn{background:var(--warn-bg); color:var(--warn)}
+  .t-ok{background:var(--ok-bg); color:var(--ok)}
+  .t-no{background:#fdecea; color:var(--p0)}
+  .t-plain{background:#f0f2f5; color:var(--ink2)}
+
+  .callout{border-left:4px solid var(--accent); background:var(--accent-bg);
+    padding:14px 18px; border-radius:0 8px 8px 0; margin:18px 0}
+  .callout.warn{border-left-color:#d68910; background:var(--warn-bg)}
+  .callout.danger{border-left-color:var(--p0); background:var(--p0-bg)}
+  .callout.ok{border-left-color:var(--ok); background:var(--ok-bg)}
+  .callout p:first-child{margin-top:0}
+  .callout p:last-child{margin-bottom:0}
+  .callout .lbl{font-weight:700; font-size:13px; letter-spacing:.3px; display:block; margin-bottom:6px}
+
+  ol,ul{padding-left:22px; margin:10px 0}
+  li{margin:5px 0}
+  .tight li{margin:3px 0}
+
+  /* 阶段卡 */
+  .phase{background:var(--card); border:1px solid var(--line); border-radius:12px; margin:20px 0; overflow:hidden}
+  .phase .ph-head{display:flex; align-items:center; gap:14px; padding:16px 22px; border-bottom:1px solid var(--line)}
+  .phase.p0 .ph-head{background:linear-gradient(90deg,var(--p0-bg),transparent)}
+  .phase.p1 .ph-head{background:linear-gradient(90deg,var(--p1-bg),transparent)}
+  .phase.p2 .ph-head{background:linear-gradient(90deg,var(--p2-bg),transparent)}
+  .phase.p3 .ph-head{background:linear-gradient(90deg,var(--p3-bg),transparent)}
+  .phase .ph-badge{flex:0 0 46px; height:46px; border-radius:10px; display:flex; align-items:center;
+    justify-content:center; font-weight:800; font-size:17px}
+  .phase.p0 .ph-badge{background:var(--p0); color:#fff}
+  .phase.p1 .ph-badge{background:var(--p1); color:#fff}
+  .phase.p2 .ph-badge{background:var(--p2); color:#fff}
+  .phase.p3 .ph-badge{background:var(--p3); color:#fff}
+  .phase .ph-title{flex:1}
+  .phase .ph-title h3{margin:0; font-size:18px}
+  .phase .ph-title .meta{font-size:13px; color:var(--ink3); margin-top:2px}
+  .phase .ph-body{padding:6px 22px 20px}
+
+  /* 甘特图 */
+  .gantt{background:var(--card); border:1px solid var(--line); border-radius:10px; padding:22px; margin:20px 0; overflow-x:auto}
+  .gantt table{margin:0; background:transparent; font-size:12.5px; min-width:760px}
+  .gantt th{padding:6px 4px; text-align:center; background:transparent; border-bottom:1px solid var(--line); font-size:11px; font-weight:600}
+  .gantt td{padding:7px 4px; border-bottom:1px solid var(--line2); text-align:center}
+  .gantt td.lbl{text-align:left; white-space:nowrap; font-weight:600; padding-right:14px; font-size:13px}
+  .bar{height:20px; border-radius:5px; display:block; font-size:11px; color:#fff; line-height:20px; font-weight:600; letter-spacing:.2px}
+  .bar.b0{background:var(--p0)} .bar.b1{background:var(--p1)}
+  .bar.b2{background:var(--p2)} .bar.b3{background:var(--p3)}
+  .bar.bjp{background:#2b7a8c; opacity:.85}
+  .bar.bcond{background:repeating-linear-gradient(45deg,#9aa3b0,#9aa3b0 6px,#b6bdc7 6px,#b6bdc7 12px)}
+
+  .wk{display:grid; grid-template-columns:64px 1fr; gap:12px; padding:11px 0; border-bottom:1px dashed var(--line2)}
+  .wk:last-child{border-bottom:none}
+  .wk .w{font-weight:700; font-size:13px; color:var(--accent); padding-top:2px; font-variant-numeric:tabular-nums}
+  .wk .c{font-size:14px}
+  .wk .c b{font-size:14.5px}
+  .wk .c .out{font-size:13px; color:var(--ink2); margin-top:3px}
+
+  .kv{display:grid; grid-template-columns:auto 1fr; gap:5px 14px; margin:12px 0; font-size:14px}
+  .kv dt{color:var(--ink3); white-space:nowrap}
+  .kv dd{margin:0}
+
+  footer{margin-top:60px; padding-top:20px; border-top:1px solid var(--line); font-size:12.5px; color:var(--ink3)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>Java 项目分阶段学习与开发计划</h1>
+  <div class="sub">P0–P3 四阶段推进路线 · 每个候选的 GitHub 开源项目对比分析 · 选型结论与时间闸门</div>
+  <div class="meta">
+    <span><b>制定日期</b> 2026-09-28</span>
+    <span><b>计划总长</b> 20 周（P0 6 + P1 6 + P2 4 + P3 4）</span>
+    <span><b>核实仓库</b> 20+ 个，含 star / 活跃度 / 规模 / 许可证 / 目录结构</span>
+  </div>
+</header>
+
+<!-- ==================================================== -->
+<h2><span class="num">01</span>先看结论：四档选型</h2>
+
+<table>
+  <thead>
+    <tr><th style="width:52px">档位</th><th style="width:210px">推荐选择</th><th>一句话理由</th><th style="width:80px">时长</th></tr>
+  </thead>
+  <tbody>
+    <tr class="win">
+      <td><span class="tag t-p0">P0</span></td>
+      <td><b>eladmin-mp</b>（MyBatis-Plus 版）<br><span class="repo">elunez/eladmin-mp</span></td>
+      <td>体量最小（后端仅 1.4 MB / 305 文件），<b>6 周真能读完</b>；MyBatis-Plus 对口日本现场；Apache-2.0 可放心改</td>
+      <td class="num">6 周</td>
+    </tr>
+    <tr class="win">
+      <td><span class="tag t-p1">P1</span></td>
+      <td><b>yu-ai-agent</b><br><span class="repo">liyupi/yu-ai-agent</span></td>
+      <td><b>三个候选里唯一有公开代码仓库的</b>；同时覆盖 Spring AI + LangChain4j + RAG + PGvector + MCP + ReAct Agent</td>
+      <td class="num">6 周</td>
+    </tr>
+    <tr class="win">
+      <td><span class="tag t-p2">P2</span></td>
+      <td><b>mall-swarm</b><br><span class="repo">macrozheng/mall-swarm</span></td>
+      <td>Spring Cloud 2025 + Spring Boot 3.5 技术栈最新；star 是天机学堂的 36 倍；有 Apache-2.0</td>
+      <td class="num">4 周</td>
+    </tr>
+    <tr class="win">
+      <td><span class="tag t-p3">P3</span></td>
+      <td><b>秒杀（以对比分析驱动）</b><br><span class="repo">qiurunze123/miaosha</span> 等三方案对比</td>
+      <td>秒杀的技术点（限流 / 缓存 / 队列 / 库存扣减）和 P0–P2 不重复，且是面试高频；<b>用「读三个实现再自己写」替代「再抄一个课程」</b></td>
+      <td class="num">4 周</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout danger">
+  <span class="lbl">⚠️ 先说一件必须说的事</span>
+  <p>上一份报告里我说过：<b>「P0 + P1 加起来约 3 个月，这已经是你能承受的上限」</b>。你现在要加 P2 + P3，总长变成 <b>20 周 ≈ 5 个月</b>。</p>
+  <p>四档全做，日语时间会被严重挤压 —— 而日语 N2 是签证<b>门槛项</b>，项目是<b>加分项</b>。门槛项没拿到，加分项再多也进不去。</p>
+  <p><b>所以本计划把 P2 / P3 设为「条件触发」而不是「计划内」</b>：只有当日语进度达标时才解锁（具体条件见第 05 节）。<b>这不是劝你别做，而是给它们装一个刹车</b> —— 没有刹车的计划，最后被砍掉的往往是日语。</p>
+</div>
+
+<!-- ==================================================== -->
+<h2><span class="num">02</span>P0 三选一对比</h2>
+
+<p>你给的三个候选里，有一个必须先说清楚的事实：</p>
+
+<div class="callout warn">
+  <span class="lbl">核实结果</span>
+  <p><b>《苍穹外卖》在 GitHub 上没有官方仓库。</b>我逐个查了培训机构账号：<code>atguigu</code>（尚硅谷）、<code>itheima</code>（黑马）、<code>itcast</code>（传智）<b>三个账号的公开仓库数都是 0</b>。课程源码全部走「关注公众号领取」。</p>
+  <p>GitHub 上能找到的都是<b>学员复刻</b>。搜到的主仓库 <code>shuhongfan/sky-take-out</code> 有 1,486 star，但它是 <b>2023-07-05 创建、2023-07-13 最后推送</b> —— 创建 8 天后就再没动过，是一份课程资料快照（132 MB，主要是素材），<b>不是持续维护的项目</b>。</p>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>维度</th>
+      <th style="width:250px">苍穹外卖</th>
+      <th style="width:250px">eladmin-mp</th>
+      <th style="width:250px">mall</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>对应仓库</b></td>
+      <td class="repo">shuhongfan/sky-take-out<br><span class="tag t-no">非官方</span></td>
+      <td class="repo">elunez/eladmin-mp<br><span class="tag t-ok">官方</span></td>
+      <td class="repo">macrozheng/mall<br><span class="tag t-ok">官方</span></td>
+    </tr>
+    <tr><td><b>Star / Fork</b></td>
+      <td class="num">1,486 / 342</td><td class="num">686 / 257</td><td class="num">84,839 / 29,836</td></tr>
+    <tr><td><b>最后推送</b></td>
+      <td class="num"><span style="color:var(--p0);font-weight:600">2023-07-13</span></td>
+      <td class="num"><span style="color:var(--ok);font-weight:600">2026-05-11</span></td>
+      <td class="num"><span style="color:var(--ok);font-weight:600">2026-09-15</span></td></tr>
+    <tr><td><b>仓库体积</b></td>
+      <td class="num">132.5 MB<br><span style="font-size:12px;color:var(--ink3)">含大量素材，非纯代码</span></td>
+      <td class="num"><b>1.4 MB</b><br><span style="font-size:12px;color:var(--ink3)">仅后端</span></td>
+      <td class="num">58.7 MB</td></tr>
+    <tr><td><b>许可证</b></td>
+      <td><span class="tag t-no">无</span></td>
+      <td><span class="tag t-ok">Apache-2.0</span></td>
+      <td><span class="tag t-ok">Apache-2.0</span></td></tr>
+    <tr><td><b>技术栈</b></td>
+      <td>Spring Boot 2.x + SpringMVC + MyBatis + MySQL + Redis + Nginx + Spring Task/Cache + Swagger + Vue2/ElementUI + <b>微信小程序</b></td>
+      <td>Spring Boot 2.7.18 + <b>MyBatis-Plus</b> + Spring Security + JWT + Redis + Redisson + Vue</td>
+      <td><b>Spring Boot 3.5 + JDK 17</b>（master）/ 2.7+JDK8（dev-v2）+ MyBatis + MyBatisGenerator + Elasticsearch + Redis + MongoDB + Docker</td></tr>
+    <tr><td><b>模块数</b></td>
+      <td class="num">单体 + 小程序端</td>
+      <td class="num">5 个模块<br><span style="font-size:12px;color:var(--ink3)">common/generator/logging/system/tools</span></td>
+      <td class="num">8 个模块<br><span style="font-size:12px;color:var(--ink3)">admin/common/demo/mbg/portal/search/security</span></td></tr>
+    <tr><td><b>文件数</b></td>
+      <td class="num">—</td><td class="num">305</td><td class="num">717</td></tr>
+    <tr><td><b>有配套讲解</b></td>
+      <td><span class="tag t-ok">B 站 199 集 / 37:50:35</span><br>播放 687.7 万，讲解最细</td>
+      <td><span class="tag t-warn">文档为主</span></td>
+      <td><span class="tag t-warn">文档齐全</span><br>README 有完整技术选型表</td></tr>
+    <tr><td><b>6 周能否吃透</b></td>
+      <td>紧。<b>38 小时视频 + 编码</b>，每周要 6.3 小时视频</td>
+      <td><b>可以</b>。305 个文件，能真读完</td>
+      <td>难。717 文件 / 58 MB，6 周只能「跑通 + 讲主干」</td></tr>
+  </tbody>
+</table>
+
+<h3>为什么推荐 eladmin-mp 而不是另外两个</h3>
+
+<div class="card">
+  <p><b>① 你的任务描述是「完整吃透」，这三个字决定了选择。</b></p>
+  <p>「吃透」的反面不是「不会用」，而是「跑通了但讲不出为什么」。717 个文件的 mall 在 6 周内只能做到「能跑 + 讲主干」，这不叫吃透。305 个文件的 eladmin 是可以真读完的 —— <b>读完 305 个文件带来的掌控感，比跑通 717 个文件更有价值</b>。</p>
+
+  <p style="margin-top:14px"><b>② MyBatis-Plus 比 JPA 更对口。</b></p>
+  <p>原版 <code>elunez/eladmin</code>（21,909 star）用的是 <b>Spring Data JPA</b>，而日本 SIer/受託開発 现场和中国互联网公司都以 <b>MyBatis / MyBatis-Plus</b> 为主。作者另开了 <code>eladmin-mp</code>（MyBatis-Plus 版），建议直接用这个。<span class="tag t-warn">代价</span> mp 版 star 只有 686，社区资料比原版少。</p>
+
+  <p style="margin-top:14px"><b>③ 后台管理系统是日本现场最典型的业务形态。</b></p>
+  <p>eladmin 的形态就是「RBAC 权限 + 多模块 + 前后端分离后台」，这正是日本受託開発 里最常见的交付物。mall 的电商业务在日本现场反而不是主流。</p>
+
+  <p style="margin-top:14px"><b>④ 苍穹外卖只在一种情况下选：你必须有个人带你走。</b></p>
+  <p>如果你自学时容易卡住、需要有人讲每一步，那 199 集视频的价值是压倒性的 —— 但要接受三个代价：① 没有官方仓库，代码靠公众号领；② Spring Boot 2.x 技术栈偏旧；③ 无许可证，不能作为你自己的作品发出去。</p>
+</div>
+
+<div class="callout">
+  <span class="lbl">如果你更想要「简历上的高星背书」</span>
+  <p>那就选 <b>mall</b>，但要把 P0 的目标从「吃透」下调为「跑通 + 能讲清主干 + 改 3 处」。这是诚实的取舍 —— 别在 6 周里假装自己吃透了 58 MB 的工程。</p>
+</div>
+
+<!-- ==================================================== -->
+<h2><span class="num">03</span>P1 三选一对比</h2>
+
+<div class="callout danger">
+  <span class="lbl">最重要的一个核实结果</span>
+  <p><b>三个候选里，有两个在 GitHub 上没有官方仓库。</b></p>
+  <ul class="tight" style="margin-bottom:0">
+    <li><b>《硅谷AI链习室》</b>（尚硅谷，B 站 87 集 / 22:48:02）：简介写的是「关注公众号：尚硅谷教育，回复"AI链习室"免费获取」→ 无公开仓库。GitHub 上唯一的复刻是 <code>CelestialVisionary/studyforge</code>，<b>5 star</b>。</li>
+    <li><b>《心理健康助手》</b>（B 站 82 集 / 22:29:25）：简介列了完整技术栈但<b>没给任何代码链接</b> → 无公开仓库。</li>
+    <li><b>yu-ai-agent</b>：✅ 有官方公开仓库，2,698 star，可直接 <code>git clone</code>。</li>
+  </ul>
+  <p style="margin-bottom:0"><b>这个差别不是小事</b>：能读代码、能改代码、能 fork 出自己的一版，是学习 AI 应用最核心的杠杆。只能看视频的话，你永远停在「看懂了」而不是「会写了」。</p>
+</div>
+
+<table>
+  <thead>
+    <tr>
+      <th>维度</th>
+      <th style="width:255px">yu-ai-agent</th>
+      <th style="width:255px">硅谷AI链习室</th>
+      <th style="width:255px">心理健康助手</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><b>GitHub 仓库</b></td>
+      <td class="repo"><span class="tag t-ok">liyupi/yu-ai-agent</span></td>
+      <td class="repo"><span class="tag t-no">无官方仓库</span><br><span style="font-size:12px">复刻 studyforge 仅 5 star</span></td>
+      <td class="repo"><span class="tag t-no">无官方仓库</span></td></tr>
+    <tr><td><b>Star / Fork</b></td>
+      <td class="num">2,698 / 614</td><td class="num">5 / 1（复刻）</td><td class="num">—</td></tr>
+    <tr><td><b>最后推送</b></td>
+      <td class="num"><span style="color:var(--ok);font-weight:600">2026-01-07</span></td>
+      <td class="num">2026-02-17</td><td class="num">—</td></tr>
+    <tr><td><b>许可证</b></td>
+      <td><span class="tag t-no">无</span></td><td><span class="tag t-no">无</span></td><td><span class="tag t-no">—</span></td></tr>
+    <tr><td><b>代码规模</b></td>
+      <td class="num">100 文件 / 287 KB</td>
+      <td class="num">复刻 111 MB</td><td class="num">—</td></tr>
+    <tr><td><b>模块结构</b></td>
+      <td>Maven 单体 + <code>src</code> + <code>yu-ai-agent-frontend</code> + <b><code>yu-image-search-mcp-server</code></b>（独立 MCP 服务）</td>
+      <td>AI + 单体架构 Java</td>
+      <td>前后端分离</td></tr>
+    <tr><td><b>后端技术栈</b></td>
+      <td><b>Java 21 + Spring Boot 3</b> + Spring AI + LangChain4j + RAG + PGvector + MCP + ReAct Agent + 自定义 Advisor + 对话记忆 + 结构化输出</td>
+      <td>AI + 单体架构（具体栈未公开）</td>
+      <td>Java + SpringBoot + <b>Spring AI</b> + MyBatis-Plus + Redis + MySQL + JWT + Spring AOP + hutool</td></tr>
+    <tr><td><b>前端技术栈</b></td>
+      <td>含 <code>yu-ai-agent-frontend</code></td>
+      <td>—</td>
+      <td>Vue3 + Vite + Element-Plus + Pinia + Vue-Router + ECharts + Axios + SCSS + wangEditor + <b>SSE 流式</b></td></tr>
+    <tr><td><b>AI 能力覆盖</b></td>
+      <td><span class="tag t-ok">最全</span> RAG / 向量库 / MCP / Agent / 工具调用 / 记忆</td>
+      <td><span class="tag t-warn">未知</span>（无代码可查）</td>
+      <td><span class="tag t-plain">中</span> SSE 流式 + AI 赋能，RAG/Agent 覆盖未明示</td></tr>
+    <tr><td><b>配套视频</b></td>
+      <td><span class="tag t-warn">完整教程需付费会员</span></td>
+      <td><span class="tag t-ok">B 站 87 集免费</span></td>
+      <td><span class="tag t-ok">B 站 82 集免费，已完结</span></td></tr>
+  </tbody>
+</table>
+
+<h3>为什么推荐 yu-ai-agent</h3>
+
+<div class="card">
+  <p><b>① 它是唯一能让你「动手改」的选项。</b>读代码 → 改代码 → 讲出改动理由，这条路只有有仓库才走得通。另两个候选你只能看视频，而看视频会产生一种「我懂了」的错觉 —— 直到面试官问「那你自己实现过吗」。</p>
+
+  <p style="margin-top:14px"><b>② 它一次性覆盖了 AI 应用岗的四个核心概念。</b>RAG（知识库检索增强）、MCP（模型上下文协议）、Agent（ReAct 自主规划）、工具调用 —— 这四个词现在几乎是 AI 应用岗 JD 的标配。而且它<b>同时用了 Spring AI 和 LangChain4j 两个框架</b>，面试时你能对比着讲「为什么两个都用」，这是加分项。</p>
+
+  <p style="margin-top:14px"><b>③ 287 KB 的体量是优点不是缺点。</b>它意味着这个仓库是「纯粹的教学代码」，没有塞素材、没有二进制垃圾，你可以快速读完。对比之下，苍穹外卖复刻是 132 MB、天机学堂复刻是 127 MB —— 那些体积里大部分不是代码。</p>
+
+  <p style="margin-top:14px"><b>④ 一个必须知道的代价：完整视频教程要付费。</b>仓库代码是公开的，但鱼皮的全程直播讲解在「编程导航」会员里。所以你的路径会是「读公开代码 + 自己查文档」。<b>如果你预算紧张且必须有人讲</b>，那就退到「心理健康助手」——82 集免费视频 + 完整技术栈，代价是没有代码仓库，得走公众号领。</p>
+</div>
+
+<div class="callout warn">
+  <span class="lbl">注意：yu-ai-agent 无许可证</span>
+  <p>它的仓库没有 LICENSE 文件。学习、本地改造没问题，但<b>不要把它 fork 后当作自己的作品公开发布</b>。如果你要发到自己的 GitHub，请明确标注来源并做实质性改造。</p>
+</div>
+
+<!-- ==================================================== -->
+<h2><span class="num">04</span>P2 二选一对比</h2>
+
+<table>
+  <thead>
+    <tr>
+      <th>维度</th>
+      <th style="width:330px">mall-swarm</th>
+      <th style="width:330px">天机学堂（shuhongfan/tjxt）</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td><b>Star / Fork</b></td>
+      <td class="num"><b>13,152</b> / 5,535</td><td class="num">365 / 123</td></tr>
+    <tr><td><b>最后推送</b></td>
+      <td class="num"><span style="color:var(--ok);font-weight:600">2026-07-31</span></td>
+      <td class="num"><span style="color:var(--p0);font-weight:600">2024-07-13</span></td></tr>
+    <tr><td><b>许可证</b></td>
+      <td><span class="tag t-ok">Apache-2.0</span></td><td><span class="tag t-no">无</span></td></tr>
+    <tr><td><b>体积 / 模块</b></td>
+      <td class="num">54.6 MB / 11 模块 / 782 文件</td><td class="num">127.3 MB（含素材）</td></tr>
+    <tr><td><b>核心技术栈</b></td>
+      <td><b>Spring Cloud 2025 + Spring Boot 3.5 + JDK 17</b><br>Spring Cloud Alibaba、Sa-Token、MyBatis、Elasticsearch、Redis、MongoDB、<b>Seata</b>（全局事务）、Docker、<b>Kubernetes</b>、Portainer</td>
+      <td>SpringBoot + SpringCloud + MyBatis + MySQL + Redis + <b>Redisson</b> + Caffeine + <b>RabbitMQ</b> + <b>XXL-JOB</b> + 腾讯云 VOD + Nginx</td></tr>
+    <tr><td><b>微服务组件</b></td>
+      <td>注册中心 / 配置中心 / <b>网关</b>（Spring Cloud Gateway）/ <b>监控中心</b>（Spring Boot Admin）/ 认证服务</td>
+      <td>Nacos、Sentinel、Seata（升级版）</td></tr>
+    <tr><td><b>独有资产</b></td>
+      <td>附带全套 Spring Cloud 教程（<code>macrozheng/springcloud-learning</code>）</td>
+      <td><b>README 用「面试官追问」体写</b>：分布式锁、Redisson 原理、Lua 原子性、点赞系统重构 —— 直接教你怎么在面试里讲</td></tr>
+    <tr><td><b>项目场景</b></td>
+      <td>完整电商微服务（从零搭）</td>
+      <td><b>模拟真实入职</b>：项目 1.0.0 已完成 60%，你来加课程学习、优惠促销、评价功能</td></tr>
+  </tbody>
+</table>
+
+<h3>怎么选</h3>
+
+<div class="card">
+  <p><b>默认选 mall-swarm</b>，三个理由：① star 是天机学堂的 36 倍，社区资料和踩坑记录多得多；② 技术栈是 2026 年最新的（Spring Cloud 2025 + Boot 3.5 + JDK 17），天机学堂复刻停在 2024-07；③ 有 Apache-2.0 许可证。</p>
+
+  <p style="margin-top:14px"><b>但如果你更看重「面试时怎么讲」，天机学堂有个别人没有的东西。</b>它的 README 不是项目介绍，而是一份<b>面试问答稿</b>——「面试官追问：那你知道 Redisson 分布式锁原理吗？」然后给出完整回答。这种把「技术实现」和「怎么讲出来」绑在一起的材料很少见。</p>
+
+  <p style="margin-top:14px"><b>还有第三种选择（一箭双雕）：</b><code>finch04/online-mooc</code> 是《天机学堂》的升级版 —— 332 star、Apache-2.0、2026-05 仍活跃，技术栈是 JDK 17 + Spring Boot 3 + Spring Cloud Alibaba 2021 + <b>Langchain4j + Qdrant</b> + Sentinel + Seata + InfluxDB + SkyWalking + Prometheus + Grafana。<b>它同时含微服务和 AI</b>，如果你想让 P2 顺带把 P1 的 AI 能力再练一遍，这个是最优解。</p>
+</div>
+
+<div class="callout ok">
+  <span class="lbl">一个被低估的学习机会</span>
+  <p>如果你 P0 选了 mall、P2 选了 mall-swarm，你会拿到一对<b>同源的单体版和微服务版</b>。这比学两个不相干的项目有价值得多 —— 你可以逐模块对照「同一个功能，单体怎么写、微服务怎么拆」，然后回答那个面试必问的问题：<b>「为什么这里要拆成微服务？」</b>能讲清取舍，比会用 Nacos 值钱。</p>
+</div>
+
+<!-- ==================================================== -->
+<h2><span class="num">05</span>P3：商城 vs 秒杀，以及为什么选秒杀</h2>
+
+<p>先说一个核实出来的、和直觉相反的数据。</p>
+
+<h3>秒杀类项目的参考实现质量分布</h3>
+
+<table>
+  <thead>
+    <tr><th>仓库</th><th style="width:78px">Star</th><th style="width:70px">Fork</th><th style="width:88px">体积</th><th style="width:96px">最后推送</th><th style="width:82px">许可证</th><th>说明</th></tr>
+  </thead>
+  <tbody>
+    <tr class="win">
+      <td class="repo">qiurunze123/miaosha</td><td class="num"><b>26,592</b></td><td class="num">6,559</td>
+      <td class="num">64.2 MB</td><td class="num">2025-04-18</td><td><span class="tag t-no">无</span></td>
+      <td>秒杀类的最高星参考。README 自己标注「原版+轻量级秒杀 <b>停更</b>」</td></tr>
+    <tr>
+      <td class="repo">zaiyunduan123/springboot-seckill</td><td class="num">3,293</td><td class="num">1,043</td>
+      <td class="num">4.9 MB</td><td class="num">2022-03-06</td><td><span class="tag t-no">无</span></td>
+      <td>Spring Boot 秒杀，已停更 4 年</td></tr>
+    <tr>
+      <td class="repo">codingXiaxw/seckill</td><td class="num">2,166</td><td class="num">1,139</td>
+      <td class="num">21.0 MB</td><td class="num">2022-12-16</td><td><span class="tag t-no">无</span></td>
+      <td>慕课网课程复刻</td></tr>
+    <tr>
+      <td class="repo">lyrric/seckill</td><td class="num">1,946</td><td class="num">635</td>
+      <td class="num">273 KB</td><td class="num">2025-12-19</td><td><span class="tag t-no">无</span></td>
+      <td>体积很小，偏教学骨架</td></tr>
+    <tr>
+      <td class="repo">gongjunhao/seckill</td><td class="num">1,946</td><td class="num">442</td>
+      <td class="num">3.1 MB</td><td class="num">2021-01-06</td><td><span class="tag t-ok">MIT</span></td>
+      <td><b>唯一有明确许可证的</b></td></tr>
+    <tr>
+      <td class="repo">hfbin/Seckill</td><td class="num">1,427</td><td class="num">464</td>
+      <td class="num">4.1 MB</td><td class="num">2024-04-18</td><td><span class="tag t-no">无</span></td>
+      <td>—</td></tr>
+  </tbody>
+</table>
+
+<p class="src" style="font-size:13px;color:var(--ink3)">
+对比商城类：<code>macrozheng/mall</code> 84,839 star / <code>jeecgboot/JeecgBoot</code> 47,995 / <code>YunaiV/ruoyi-vue-pro</code> 39,462 / <code>linlinjava/litemall</code> 20,372 / <code>newbee-ltd/newbee-mall</code> 11,645。
+</p>
+
+<div class="callout">
+  <span class="lbl">从数据里读出的两条</span>
+  <p><b>① 秒杀的参考实现比商城少一个量级，且几乎全部停更。</b>商城类最高 84.8k star 且 2026-09 仍在推送；秒杀类最高 26.6k，README 自己写着「停更」，其余多数停在 2021–2022。</p>
+  <p><b>② 秒杀类 7 个仓库里只有 1 个有许可证。</b>这意味着你读到的实现大多不能直接复用 —— 但反过来说，<b>这也正是它能产生差异化的原因</b>：没有成熟参考，你自己做的方案就是你自己的。</p>
+</div>
+
+<h3>为什么还是选秒杀</h3>
+
+<div class="card">
+  <p><b>① 技术点和 P0–P2 完全不重复。</b>商城你已经做过两遍了（P0 的后台 + P2 的微服务电商）。再做一遍商城，边际收益接近零。而秒杀逼你处理的是另一类问题：<b>库存原子扣减、一人一单、防超卖、限流削峰、缓存与数据库一致性</b>。</p>
+
+  <p style="margin-top:14px"><b>② 这些技术点是面试高频，日本现场也用得到。</b>日本 SIer 虽然以业务系统为主，但「高并发下的数据一致性」是通用能力，而且这是能让你在面试里从「做过 CRUD」变成「处理过并发问题」的分水岭。</p>
+
+  <p style="margin-top:14px"><b>③ 参考实现少，反而是机会。</b>正因为没有 84.8k star 的成熟参考，你「读三个实现 → 对比方案 → 自己写一版」的过程才真的是在做研究，而不是在抄。这也正好承接你要的「对比分析」。</p>
+
+  <p style="margin-top:14px"><b>但必须换一种做法。</b>不要「跟着一个课程再抄一遍秒杀」。正确姿势是：<b>先读三个开源实现的限流/缓存/队列方案，输出对比表，再自己实现核心链路</b>。这样 P3 的产出是一份「方案对比 + 我的选择及理由」，而不是第四个练手项目。</p>
+</div>
+
+<!-- ==================================================== -->
+<h2><span class="num">06</span>分阶段计划（20 周）</h2>
+
+<div class="gantt">
+  <table>
+    <thead>
+      <tr>
+        <th style="text-align:left">阶段</th>
+        <th>W1</th><th>W2</th><th>W3</th><th>W4</th><th>W5</th><th>W6</th>
+        <th>W7</th><th>W8</th><th>W9</th><th>W10</th><th>W11</th><th>W12</th>
+        <th>W13</th><th>W14</th><th>W15</th><th>W16</th>
+        <th>W17</th><th>W18</th><th>W19</th><th>W20</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="lbl">P0 eladmin-mp</td>
+        <td colspan="6"><span class="bar b0">完整吃透单体项目 · 6 周</span></td>
+        <td colspan="14"></td>
+      </tr>
+      <tr>
+        <td class="lbl">P1 yu-ai-agent</td>
+        <td colspan="6"></td>
+        <td colspan="6"><span class="bar b1">Java + AI 应用 · 6 周</span></td>
+        <td colspan="8"></td>
+      </tr>
+      <tr>
+        <td class="lbl">P2 mall-swarm <span class="tag t-warn">条件</span></td>
+        <td colspan="12"></td>
+        <td colspan="4"><span class="bar bcond">微服务 · 4 周</span></td>
+        <td colspan="4"></td>
+      </tr>
+      <tr>
+        <td class="lbl">P3 秒杀对比 <span class="tag t-warn">条件</span></td>
+        <td colspan="16"></td>
+        <td colspan="4"><span class="bar bcond">对比 + 自研 · 4 周</span></td>
+      </tr>
+      <tr>
+        <td class="lbl">日语（不可侵占）</td>
+        <td colspan="20"><span class="bar bjp">全程并行 · 每日固定时段 · 项目不得侵占</span></td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ---------------- P0 ---------------- -->
+<div class="phase p0">
+  <div class="ph-head">
+    <div class="ph-badge">P0</div>
+    <div class="ph-title">
+      <h3>完整吃透一个 Spring Boot 单体项目</h3>
+      <div class="meta">第 1–6 周 ｜ 选定：<b>eladmin-mp</b>（备选：苍穹外卖 / mall）</div>
+    </div>
+  </div>
+  <div class="ph-body">
+    <p><b>阶段目标</b>：不只是跑通，而是能画出模块依赖图、能讲清一次请求的完整链路、能独立加一个业务模块。</p>
+
+    <div class="wk"><div class="w">W1</div><div class="c">
+      <b>跑通 + 摸清地形</b>
+      <div class="out">环境搭建（JDK / MySQL / Redis / Node）、前后端跑通、<b>手画模块依赖图</b>（5 个模块各自负责什么、谁依赖谁）、列出所有技术栈清单并逐个查清用途。</div></div></div>
+
+    <div class="wk"><div class="w">W2</div><div class="c">
+      <b>认证与鉴权链路</b>
+      <div class="out">JWT 签发/校验、Spring Security 过滤器链。<b>产出：一次登录请求从进网关到返回 token 的完整时序图</b>（自己画，不许复制）。</div></div></div>
+
+    <div class="wk"><div class="w">W3</div><div class="c">
+      <b>权限模型（这个项目的核心）</b>
+      <div class="out">RBAC、接口级权限、数据级权限、菜单动态路由。<b>产出：能回答「一个请求怎么被判定有权/无权」的全过程</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W4</div><div class="c">
+      <b>数据层</b>
+      <div class="out">MyBatis-Plus 的 CRUD、条件构造器、分页、代码生成器、事务。<b>产出：手写一个完整业务模块的增删改查</b>（不生成，手写）。</div></div></div>
+
+    <div class="wk"><div class="w">W5</div><div class="c">
+      <b>工程化能力 + 第一次改造</b>
+      <div class="out">Redis 缓存与 Redisson、异步线程池、全局异常处理、日志、限流。<b>改造任务：加一个自己的业务模块</b>（比如「学习打卡记录」），走完整链路。</div></div></div>
+
+    <div class="wk"><div class="w">W6</div><div class="c">
+      <b>部署 + 复盘 + 写面试稿</b>
+      <div class="out">打包部署；<b>写一份自己的 README</b>（架构图 + 模块说明 + 你改了什么 + 你的取舍理由）；整理 10 个可能被追问的问题并写下答案。</div></div></div>
+
+    <div class="callout ok" style="margin-top:16px">
+      <span class="lbl">P0 验收标准（全中才算过）</span>
+      <ul class="tight" style="margin-bottom:0">
+        <li>能不看代码画出模块依赖图</li>
+        <li>能讲清「一次带权限的请求」的完整链路（≥5 分钟）</li>
+        <li>自己加的模块能跑通，且能说出每一行为什么这么写</li>
+        <li>有一份自己写的 README，不是复制粘贴的</li>
+        <li>10 个追问问题里有 ≥7 个能答上来</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------- P1 ---------------- -->
+<div class="phase p1">
+  <div class="ph-head">
+    <div class="ph-badge">P1</div>
+    <div class="ph-title">
+      <h3>完成一个 Java + AI 项目</h3>
+      <div class="meta">第 7–12 周 ｜ 选定：<b>yu-ai-agent</b>（备选：心理健康助手 82 集免费视频）</div>
+    </div>
+  </div>
+  <div class="ph-body">
+    <p><b>阶段目标</b>：能讲清 RAG 的完整链路和 Agent 的工具调用循环 —— 这两件事是 AI 应用岗面试的分水岭。</p>
+
+    <div class="wk"><div class="w">W7</div><div class="c">
+      <b>AI 基础概念 + 跑通最小闭环</b>
+      <div class="out">LLM 调用、Prompt、Token、上下文窗口、结构化输出。跑通一个最小 Spring AI 对话 Demo。<b>产出：能解释「一次大模型调用发生了什么」</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W8</div><div class="c">
+      <b>Spring AI 核心机制</b>
+      <div class="out">ChatClient、Advisor 拦截链、对话记忆（多轮上下文怎么存）、结构化输出。<b>产出：自己写一个自定义 Advisor</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W9</div><div class="c">
+      <b>RAG 全链路（最重要的一周）</b>
+      <div class="out">文档加载 → 切分策略 → 向量化 → PGvector 存储 → 相似度检索 → 增强生成。<b>产出：一张 RAG 全链路图 + 能讲清「为什么切分策略会影响效果」</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W10</div><div class="c">
+      <b>MCP 模型上下文协议</b>
+      <div class="out">理解 MCP 解决什么问题（让模型访问外部工具/数据）。读 <code>yu-image-search-mcp-server</code> 的实现，<b>改造或自己写一个 MCP 服务</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W11</div><div class="c">
+      <b>ReAct Agent</b>
+      <div class="out">工具调用循环、自主规划、失败重试。理解 ReAct（Reason + Act）和普通函数调用的区别。<b>产出：能讲清 Agent 怎么决定「下一步调用哪个工具」</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W12</div><div class="c">
+      <b>改造 + 部署 + 写面试稿</b>
+      <div class="out">做一个自己的改造（换业务场景 / 加一个工具 / 优化检索）。部署上线。<b>产出：RAG 调优笔记 + Agent 讲解稿</b>。</div></div></div>
+
+    <div class="callout ok" style="margin-top:16px">
+      <span class="lbl">P1 验收标准</span>
+      <ul class="tight" style="margin-bottom:0">
+        <li>能白板画出 RAG 全链路，并说出每一步的可调参数</li>
+        <li>能讲清 Agent 的工具调用循环（不是「它自己会调」，而是具体机制）</li>
+        <li>有一个跑起来的、能演示的 AI 应用</li>
+        <li>能对比 Spring AI 和 LangChain4j 的差异与各自适用场景</li>
+        <li><b>至少一处是你自己改的，且能说出为什么改</b></li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ---------------- P2 ---------------- -->
+<div class="phase p2">
+  <div class="ph-head">
+    <div class="ph-badge">P2</div>
+    <div class="ph-title">
+      <h3>补充一块微服务</h3>
+      <div class="meta">第 13–16 周 ｜ 选定：<b>mall-swarm</b>（备选：天机学堂 / finch04-online-mooc）</div>
+    </div>
+  </div>
+  <div class="ph-body">
+    <div class="callout warn" style="margin-top:0">
+      <span class="lbl">解锁条件</span>
+      <p>P1 按时完成（不超 6 周）<b>且</b>日语进度达标（见第 07 节）。任一不满足 → 直接跳到 P3 或结束项目阶段，把时间还给日语。</p>
+    </div>
+
+    <div class="wk"><div class="w">W13</div><div class="c">
+      <b>拆分的逻辑（比会配 Nacos 更重要）</b>
+      <div class="out">对照 P0 的单体，逐个模块回答「为什么要拆成服务」。Nacos 注册中心 + 配置中心。<b>产出：一张「单体 vs 微服务」模块对照表</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W14</div><div class="c">
+      <b>网关与认证</b>
+      <div class="out">Spring Cloud Gateway 路由与过滤器、Sa-Token 认证在网关层的处理、服务间调用。<b>产出：能讲清「请求穿过网关后怎么找到目标服务」</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W15</div><div class="c">
+      <b>分布式事务与服务容错</b>
+      <div class="out">Seata 的 AT 模式、为什么单体不需要而微服务需要、消息队列的可靠投递。<b>产出：能举一个「跨服务写数据失败」的例子并说出 Seata 怎么处理</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W16</div><div class="c">
+      <b>监控与部署 + 复盘</b>
+      <div class="out">Spring Boot Admin 监控、Docker 编排、K8s 概念。<b>产出：一份「单体 vs 微服务取舍」笔记</b> —— 这是面试必问，也是这一档最大的价值。</div></div></div>
+  </div>
+</div>
+
+<!-- ---------------- P3 ---------------- -->
+<div class="phase p3">
+  <div class="ph-head">
+    <div class="ph-badge">P3</div>
+    <div class="ph-title">
+      <h3>秒杀系统：以对比分析驱动，而不是再抄一遍</h3>
+      <div class="meta">第 17–20 周 ｜ 参考：qiurunze123/miaosha、zaiyunduan123/springboot-seckill、lyrric/seckill</div>
+    </div>
+  </div>
+  <div class="ph-body">
+    <div class="callout warn" style="margin-top:0">
+      <span class="lbl">解锁条件</span>
+      <p>P2 完成<b>且</b>日语进度达标。不满足 → 项目阶段在此结束，全部时间转日语。</p>
+    </div>
+
+    <div class="wk"><div class="w">W17</div><div class="c">
+      <b>读三个实现，输出对比表</b>
+      <div class="out">对比三个仓库在<b>库存扣减方案（数据库乐观锁 / Redis Lua / 队列）、一人一单实现、限流策略、缓存与 DB 一致性</b>上的差异。不写代码，只读和对比。</div></div></div>
+
+    <div class="wk"><div class="w">W18</div><div class="c">
+      <b>自己实现核心链路</b>
+      <div class="out">Redis + Lua 原子扣减、一人一单（Redis Set / 唯一索引）、防超卖。<b>产出：核心链路的正确性测试</b>（并发下库存不为负、同一用户不重复下单）。</div></div></div>
+
+    <div class="wk"><div class="w">W19</div><div class="c">
+      <b>削峰与限流</b>
+      <div class="out">消息队列异步下单、令牌桶/漏桶限流、缓存预热与防击穿。<b>产出：能讲清「流量高峰时请求是怎么被削平的」</b>。</div></div></div>
+
+    <div class="wk"><div class="w">W20</div><div class="c">
+      <b>压测 + 写对比分析文档</b>
+      <div class="out">压测（JMeter/wrk）拿数据，写一份《三种秒杀方案对比 + 我的选择及理由》。<b>这份文档本身就是简历素材</b>。</div></div></div>
+
+    <div class="callout ok" style="margin-top:16px">
+      <span class="lbl">P3 验收标准</span>
+      <ul class="tight" style="margin-bottom:0">
+        <li>有一份三个开源实现的横向对比表（不是罗列功能，是对比方案差异）</li>
+        <li>自己实现的秒杀在并发下不超卖、不重复下单</li>
+        <li>有压测数据，能说出瓶颈在哪</li>
+        <li>能讲清「为什么我选了这个方案而不是另外两个」</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================================================== -->
+<h2><span class="num">07</span>时间闸门与日语约束</h2>
+
+<div class="callout danger">
+  <span class="lbl">这个计划最重要的一节</span>
+  <p>20 周项目计划最大的风险不是「做不完」，而是<b>做完了、日语没动</b>。写代码当天就有反馈，学日语要三个月后才看到效果 —— 这个引力差会让项目不断挤占日语时间，而且每一次挤占都有「就今天例外」的合理理由。</p>
+</div>
+
+<h3>三条硬规则</h3>
+
+<div class="card">
+  <p><b>规则一：日语时段不可侵占，且要前置。</b></p>
+  <p>把日语放在每天的<b>第一个时段</b>，而不是「项目做完还有精力再学」。理由很简单：项目是无限可投入的（永远有东西可以优化），日语是有固定课时的。<b>用有边界的任务去挤占无边界的任务，结果必然是有边界的那个消失。</b></p>
+
+  <p style="margin-top:16px"><b>规则二：每档设硬截止日期，到点砍功能收尾，不延期。</b></p>
+  <p>P0 第 6 周末、P1 第 12 周末、P2 第 16 周末、P3 第 20 周末。到点没做完 → 砍掉未完成的功能，写复盘，进入下一档。<b>「顺延一周」是最容易发生的失控方式</b>，因为它看起来只是个小让步。</p>
+
+  <p style="margin-top:16px"><b>规则三：P2 / P3 是条件触发，不是计划内。</b></p>
+  <p>它们不在你的「必须完成」清单里。解锁条件：<b>日语进度达标 + 上一档按时完成</b>。两个条件都满足才启动。这样即使 P2/P3 全部砍掉，你仍然完成了「一个能讲透的 Java 后端项目 + 一个 Java+AI 项目 + 日语推进」——这已经是一份完整的求职准备。</p>
+</div>
+
+<h3>日语进度参考锚点</h3>
+
+<table>
+  <thead>
+    <tr><th style="width:110px">时间点</th><th style="width:150px">日语应达到</th><th>如果没达到怎么办</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">P0 结束（第 6 周）</td><td>五十音完全熟练 + 基础句型</td><td>P1 照常推进（P1 是计划内），但日语每日时长增加</td></tr>
+    <tr><td class="num">P1 结束（第 12 周）</td><td>N5 水平，能读简单句子</td><td><b>冻结 P2</b>，把 P2 的 4 周全部转给日语</td></tr>
+    <tr><td class="num">P2 结束（第 16 周）</td><td>N4 水平</td><td><b>冻结 P3</b>，项目阶段结束</td></tr>
+    <tr><td class="num">P3 结束（第 20 周）</td><td>N4 → N3 过渡</td><td>—</td></tr>
+  </tbody>
+</table>
+
+<p class="src" style="font-size:13px;color:var(--ink3)">
+锚点说明：以上是按「每日固定学习时长」估算的粗略参考，不是精确课表。实际进度取决于每日投入时长与学习效率 —— 请按自己的实际情况调整，但<b>「没达标就冻结下一档项目」这条机制不要改</b>。
+</p>
+
+<!-- ==================================================== -->
+<h2><span class="num">08</span>数据来源与口径</h2>
+
+<table>
+  <thead><tr><th style="width:150px">项目</th><th>说明</th></tr></thead>
+  <tbody>
+    <tr><td><b>GitHub 数据</b></td>
+      <td>GitHub REST API 逐仓库实测（<code>repos/{owner}/{repo}</code>、<code>/readme</code>、<code>/contents</code>、<code>/git/trees</code>）。star / fork / 体积 / 创建与推送时间 / 许可证 / 文件数均为 <b>2026-09-28 快照</b>。star 与推送时间会持续变化。</td></tr>
+    <tr><td><b>B 站数据</b></td>
+      <td>站内搜索接口 + 视频详情接口（<code>web-interface/view</code>）。集数与总时长取自详情接口；时长口径为「总分钟数:秒」，已交叉验证。</td></tr>
+    <tr><td><b>机构账号核实</b></td>
+      <td>直接查询 <code>atguigu</code> / <code>itheima</code> / <code>itcast</code> 三个账号的 <code>public_repos</code> 字段，结果均为 <b>0</b>。据此判断培训机构课程无官方 GitHub 仓库。</td></tr>
+    <tr><td><b>未验证项</b></td>
+      <td>《硅谷AI链习室》的具体技术栈未公开（只有视频、无代码仓库），表中标注为「未公开」。<code>shuhongfan/*</code> 系列为第三方学员复刻，<b>不能确定与课程原始代码完全一致</b>。</td></tr>
+  </tbody>
+</table>
+
+<footer>
+  <p><b>报告信息</b>　生成日期 2026-09-28　｜　选型结论基于当日 GitHub 实测数据，仓库活跃度与 star 会持续变化　｜　本报告不含任何个人路径、账号信息或真实语料数据。</p>
+  <p>计划部分（第 06–07 节）为基于上述数据的建议，不构成唯一正确方案；请按自己的实际进度调整，但建议保留「到点砍功能」和「日语优先」两条机制。</p>
+</footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,1150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>P2 环境搭建实录</title>
+<style>
+:root{--ink:#1b1f24;--muted:#5b6570;--faint:#8b949e;--line:#e2e6ea;--line-2:#eef1f4;
+--soft:#f7f9fb;--soft-2:#f0f4f8;--accent:#1f6feb;--accent-soft:#eaf2ff;
+--mono:"Cascadia Mono",Consolas,"SF Mono",Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:#fff;color:var(--ink);
+font-family:"PingFang SC","Microsoft YaHei","Hiragino Sans GB",system-ui,-apple-system,sans-serif;
+font-size:16px;line-height:1.85}
+.wrap{max-width:920px;margin:0 auto;padding:48px 28px 96px}
+.top{border-bottom:1px solid var(--line);padding-bottom:14px;margin-bottom:34px;
+display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.top a{color:var(--accent);text-decoration:none;font-size:14px}
+.top a:hover{text-decoration:underline}
+h1{font-size:26px;line-height:1.4;margin:0 0 8px;font-weight:700}
+h2{font-size:20px;margin:44px 0 12px;padding-bottom:8px;border-bottom:2px solid var(--ink);font-weight:700}
+h3{font-size:17px;margin:30px 0 10px;font-weight:700;color:#0d1b2a}
+h4{font-size:15px;margin:22px 0 8px;font-weight:700;color:var(--muted)}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 14px;padding-left:24px}
+li{margin:0 0 6px}
+code{font-family:var(--mono);font-size:13.5px;background:var(--soft-2);padding:1.5px 6px;border-radius:5px;color:#0b3d85;word-break:break-word}
+pre{background:#0d1117;color:#e6edf3;border-radius:9px;padding:15px 18px;overflow-x:auto;
+font-family:var(--mono);font-size:13px;line-height:1.7;margin:0 0 20px}
+pre code{background:none;color:inherit;padding:0}
+blockquote{margin:0 0 18px;padding:12px 18px;background:var(--soft);border-left:3px solid var(--accent);border-radius:0 8px 8px 0}
+blockquote p:last-child{margin-bottom:0}
+table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.65;margin:0 0 22px}
+th,td{text-align:left;padding:9px 12px;border:1px solid var(--line);vertical-align:top}
+th{background:var(--soft);font-weight:700}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid #bcd4f7}
+a:hover{border-bottom-color:var(--accent)}
+hr{border:none;border-top:1px solid var(--line);margin:40px 0}
+.foot{color:var(--faint);font-size:13px;border-top:1px solid var(--line);padding-top:18px;margin-top:52px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a href="index.html">&larr; 返回索引</a>
+    <span style="color:var(--faint);font-size:13px">P2 环境搭建实录</span>
+  </div>
+<h1 id="p2-mall-swarm">P2 — mall-swarm 启动手册</h1>
+<blockquote>
+<p>状态：<strong>7 个模块已全部启动并逐个验证通过；端到端业务链路（网关 → auth → admin → MySQL → ES → MongoDB）已跑通；
+下单全链路含延迟取消闭环（TTL → 死信 → 消费者关单 → 库存回滚）已实测通过</strong>
+2026-09-28（当日更新：中间件 8 件补齐 → 9 模块构建通过 → 7 模块全部 UP → 下单闭环跑通，见 §9）</p>
+</blockquote>
+<hr />
+<h2 id="0-p2-p0p1">0. 先读这一段：P2 比 P0/P1 复杂在哪</h2>
+<p>P0 是单模块、配置写死在仓库里。<strong>P2 是 7 个模块 + 一个配置中心</strong>，多出两层依赖：</p>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>依赖</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>中间件</td>
+<td>Nacos / MySQL / Redis / MongoDB / RabbitMQ / Elasticsearch</td>
+<td>见第 3 节，按模块分</td>
+</tr>
+<tr>
+<td><strong>配置中心</strong></td>
+<td><strong>Nacos 里必须有对应 dataId 的配置</strong></td>
+<td>⚠️ 见第 2 节，这是最容易卡住的地方</td>
+</tr>
+<tr>
+<td>服务发现</td>
+<td>各模块启动后互相注册</td>
+<td>mall-auth 靠 Feign 调 mall-admin/mall-portal</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 一句话配方</h2>
+<pre><code class="language-bash"># ① 起中间件（8 件；ES 约 18s、Nacos 约 30s，其余各约 4s，全套约 60s）
+cd /d/java-workspace &amp;&amp; bash svc.sh start full
+bash svc.sh status          # 8 行全绿才算齐
+
+# ② 构建 + 启停模块（p2.sh 已把下面这些坑全包好了，见第 8 节）
+./p2.sh build               # ≈30s，9 个模块全部 SUCCESS
+./p2.sh start               # 7 个模块并行起，约 90s 内全部就绪
+./p2.sh status              # 端口 + /actuator/health 一览
+./p2.sh logs admin          # 跟某个模块的日志
+./p2.sh stop                # 全部停止
+</code></pre>
+<p><code>p2.sh</code> 里已经固化了两件<strong>不加就必然失败</strong>的事，手动敲命令时别忘：</p>
+<table>
+<thead>
+<tr>
+<th>必须加</th>
+<th>不加会怎样</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>-Ddocker.skip=true</code></td>
+<td>6 个模块在 <code>package</code> 阶段挂掉，报 <code>192.168.3.101:2375 failed to respond</code></td>
+</tr>
+<tr>
+<td><code>--spring.cloud.nacos.discovery.ip=127.0.0.1</code></td>
+<td>多网卡机器上注册到不可达的地址，Feign 调用超时</td>
+</tr>
+<tr>
+<td>先清 <code>SERVER__PORT</code></td>
+<td>应用去抢宿主端口，<code>PortInUseException</code></td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>JDK</td>
+<td><strong>17</strong>（<code>pom.xml</code> 里 <code>&lt;java.version&gt;17&lt;/java.version&gt;</code>）</td>
+</tr>
+<tr>
+<td>Spring Boot</td>
+<td>3.5.14 + Spring Cloud 2025.0.2 + Alibaba 2025.0.0.0</td>
+</tr>
+<tr>
+<td>Nacos 客户端</td>
+<td><strong>3.0.3</strong> ⇒ 服务端必须是 <strong>Nacos 3.x</strong>（已装 3.0.3）</td>
+</tr>
+<tr>
+<td>模块数</td>
+<td>9（admin / auth / common / demo / gateway / mbg / monitor / portal / search）</td>
+</tr>
+<tr>
+<td>可运行模块</td>
+<td>7（<code>common</code> / <code>mbg</code> 是被依赖的库，不单独启动）</td>
+</tr>
+<tr>
+<td>构建</td>
+<td>系统 Maven 3.9.16</td>
+</tr>
+<tr>
+<td>构建耗时</td>
+<td>全量 <code>clean install</code> 约 30 秒（依赖已缓存）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-nacos">2. ⚠️ 最关键的一节：配置在 Nacos 里，不在仓库里</h2>
+<p>每个模块的 <code>application-dev.yml</code> 长这样：</p>
+<pre><code class="language-yaml">spring:
+  config:
+    import:
+      - nacos:mall-admin-dev.yaml?refreshEnabled=true
+</code></pre>
+<p><strong>注意没有 <code>optional:</code> 前缀。</strong> 这意味着：配置在 Nacos 里找不到 → 模块直接启动失败
+（<code>ConfigDataResourceNotFoundException</code>），连端口都不会去监听。</p>
+<p>仓库里的 <code>config/</code> 目录就是给导入用的原始素材，但官方没提供导入脚本 ——
+只能手动在控制台一条条粘，或者用本工作区写的脚本：</p>
+<pre><code class="language-bash">cd /d/java-workspace
+&quot;C:\Users\Administrator\.workbuddy-ai\binaries\python\envs\default\Scripts\python.exe&quot; tools/p2-publish-nacos-configs.py
+</code></pre>
+<p>实测输出：</p>
+<pre><code>  [OK]   登录 Nacos 成功（nacos），拿到 accessToken
+
+  [OK]   mall-admin-dev.yaml      已发布并读回校验一致（1469 字符，md5=2a835f36e9ea52506c315e963649519d）
+  [OK]   mall-auth-dev.yaml       已发布并读回校验一致（1299 字符，md5=a2bb17c9674c5c030ecf9dbac5748a9a）
+  [OK]   mall-demo-dev.yaml       已发布并读回校验一致（735 字符，md5=9e7a31a613b1bfe6e63a87b8a32f4c4b）
+  [OK]   mall-gateway-dev.yaml    已发布并读回校验一致（610 字符，md5=7be764ea445f7ab35c3a923be8b04dab）
+  [OK]   mall-portal-dev.yaml     已发布并读回校验一致（1334 字符，md5=7b3cd794f4acf3d3b0ac078e1640c755）
+  [OK]   mall-search-dev.yaml     已发布并读回校验一致（764 字符，md5=766bb1da82b0120b231ddeac5dc2b542）
+
+  成功 6 个，失败 0 个
+</code></pre>
+<p><strong>这 6 个已经发布好了</strong>，重启 Nacos 后仍在（Nacos standalone 用内嵌存储，数据在 <code>.runtime\nacos\nacos\data\</code>）。</p>
+<h3 id="_1">发布时踩到的两个坑</h3>
+<p><strong>坑 A：响应体形状和直觉不一样</strong></p>
+<p>Nacos 3.x 的客户端读接口返回的是</p>
+<pre><code class="language-json">{&quot;code&quot;:0,&quot;message&quot;:&quot;success&quot;,&quot;data&quot;:{&quot;content&quot;:&quot;...&quot;,&quot;md5&quot;:&quot;...&quot;,&quot;success&quot;:true}}
+</code></pre>
+<p>也就是说正文在 <strong><code>data.content</code></strong> 里，<code>data</code> 本身是个对象，不是字符串。
+配置不存在时才是 <code>{"code":20004,"message":"resource not found","data":null}</code>。
+按 <code>data</code> 直接比字符串会把「发布成功」误判成「读回为空」。</p>
+<p><strong>坑 B：客户端读接口不是立即可见的</strong></p>
+<p>刚发布完立刻读，可能读到<strong>上一次的旧值</strong>。实测：连发两次不同内容，第二次读回的还是第一次的。
+所以校验必须轮询重试，不能读一次就下结论。</p>
+<h3 id="mall-auth-devyaml">仓库自身的缺口：<code>mall-auth-dev.yaml</code> 不存在</h3>
+<p><code>config/</code> 目录下只有 <code>admin</code> / <code>demo</code> / <code>gateway</code> / <code>portal</code> / <code>search</code> ——
+但 <code>mall-auth</code> 声明了要 <code>nacos:mall-auth-dev.yaml</code>。<strong>这是仓库的问题，不是本地环境问题。</strong></p>
+<p>已按其它模块的结构补了一份 <code>config/auth/mall-auth-dev.yaml</code>，依据是：</p>
+<ul>
+<li>mall-auth 的 pom 里有 <code>spring-boot-starter-data-redis</code> → <strong>需要 Redis</strong></li>
+<li>mall-common <strong>没有</strong> jdbc / mybatis 依赖 → <strong>不需要数据源</strong></li>
+<li>登录校验走 OpenFeign 调 mall-admin / mall-portal，mall-auth 自己只签发和校验 token</li>
+</ul>
+<hr />
+<h2 id="3">3. 各模块需要哪些中间件</h2>
+<p>下表是<strong>读 pom + 读 Java 代码 + 读配置</strong>核出来的，不是凭印象：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>端口</th>
+<th>MySQL</th>
+<th>Redis</th>
+<th>Nacos</th>
+<th>MongoDB</th>
+<th>RabbitMQ</th>
+<th>ES</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mall-gateway</td>
+<td>8201</td>
+<td>—</td>
+<td>✅</td>
+<td>✅</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>mall-admin</td>
+<td>8080</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>—</td>
+<td><strong>—</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td>mall-auth</td>
+<td>8401</td>
+<td>—</td>
+<td>✅</td>
+<td>✅</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>mall-portal</td>
+<td>8085</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>—</td>
+</tr>
+<tr>
+<td>mall-search</td>
+<td>8081</td>
+<td>✅</td>
+<td><strong>—</strong></td>
+<td>✅</td>
+<td>—</td>
+<td>—</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>mall-demo</td>
+<td>8082</td>
+<td>✅</td>
+<td>✅</td>
+<td>✅</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td>mall-monitor</td>
+<td>8101</td>
+<td>—</td>
+<td>—</td>
+<td>✅</td>
+<td>—</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong><code>mall-admin</code> 原来被我标成需要 RabbitMQ，那是错的。</strong> 核查依据：
+<code>bash
+grep -i "amqp\|rabbit" mall-admin/pom.xml                      # 无命中
+grep -rn "RabbitTemplate\|@RabbitListener" mall-admin/src      # 无命中
+grep -rn "rabbitmq" config/admin/ mall-admin/ --include=*.yml  # 无命中</code>
+<strong>全仓库只有 <code>mall-portal</code> 需要 RabbitMQ。</strong> 这条修正的实际意义是：
+只跑 gateway+admin+auth+demo+monitor 的话，RabbitMQ 完全不用启。</p>
+<p>⚠️ <strong>还有两处是启动之后才发现的，已按实测改正</strong>（见 §8 坑 7 / 坑 8）：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>原写法</th>
+<th>实测结论</th>
+<th>判据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mall-search</td>
+<td>Redis ✅</td>
+<td><strong>Redis —</strong></td>
+<td><code>mall-search/pom.xml</code> 里对 <code>mall-mbg</code> 显式 <strong>exclude</strong> 了 <code>spring-boot-starter-data-redis</code>；运行期 <code>/actuator/health</code> 里<strong>没有</strong> redis 组件</td>
+</tr>
+<tr>
+<td>mall-demo</td>
+<td><code>(继承)</code></td>
+<td><strong>Redis ✅</strong></td>
+<td>运行期 health 里<strong>有</strong> redis 组件，且不补配置就是 <code>DOWN</code></td>
+</tr>
+</tbody>
+</table>
+<p>教训：<strong>光读 pom 不够，最终判据是运行期 <code>/actuator/health</code> 里到底有没有那个组件。</strong></p>
+</blockquote>
+<h3 id="redis">依赖是怎么传递的（决定了「为什么几乎每个模块都要 Redis」）</h3>
+<pre><code>mall-common    ← spring-boot-starter-data-redis          （Redis 客户端在这）
+    ↑
+mall-mbg       ← mall-common + mybatis + druid + mysql-connector-j   （MySQL 在这）
+    ↑
+mall-admin / mall-portal / mall-search / mall-demo
+</code></pre>
+<ul>
+<li><strong>MySQL</strong>：只有依赖 <code>mall-mbg</code> 的模块才有 ⇒ admin / portal / search / demo 四个</li>
+<li><strong>Redis</strong>：<code>mall-common</code> 就带 ⇒ gateway / auth 直接依赖它；
+  admin / portal / demo 通过 <code>mall-mbg</code> 间接带上。
+  <strong>唯独 <code>mall-search</code> 是例外</strong> —— 它在 pom 里对 <code>mall-mbg</code> 显式排除了这个 starter，
+  所以 search 是全套里唯一「有 MySQL 但没有 Redis」的模块</li>
+<li><strong>mall-monitor 是干净的</strong>：只依赖 <code>nacos-discovery</code> + <code>spring-boot-admin-server</code>，
+  既不碰 mall-common 也不碰 mall-mbg ⇒ <strong>只需要 Nacos</strong></li>
+</ul>
+<p>⇒ 想跑「最小可用集」（gateway + admin + auth + demo + monitor），
+只需要 <strong>MySQL + Redis + Nacos</strong>。</p>
+<hr />
+<h2 id="4">4. 改了哪些配置</h2>
+<p>用脚本批量改的（<code>tools/p2-fix-configs.py</code>），<strong>每处原值都备份成同名 <code>.orig</code> 文件</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>改动</th>
+<th>处数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>jdbc:mysql://localhost:3306/mall</code> → <code>:3308</code></td>
+<td>8</td>
+<td>P2 用 MySQL <strong>8</strong>，不是 P0 那个 5.7</td>
+</tr>
+<tr>
+<td>datasource <code>password: root</code> → <code>123456</code></td>
+<td>8</td>
+<td>工作区统一 root 密码</td>
+</tr>
+<tr>
+<td>Redis <code>port: 6379</code> → <code>6380</code></td>
+<td>5</td>
+<td>含 <code>config/gateway/</code> 和 <code>mall-gateway/application.yml</code></td>
+</tr>
+</tbody>
+</table>
+<p>涉及的 9 个文件：
+<code>config/{admin,auth,demo,gateway,portal,search}/mall-*-dev.yaml</code> +
+<code>mall-{admin,demo,portal,search,gateway}/src/main/resources/application.yml</code></p>
+<h3 id="password">为什么不用整文件替换 <code>password</code></h3>
+<p><code>mall-portal</code> 里还有 <strong>RabbitMQ 的 <code>username: mall</code> / <code>password: mall</code></strong> 和 <strong>MongoDB 的 27017</strong>。
+整文件替换 <code>password</code> 会误伤它们。所以脚本按「<code>username: root</code> 紧跟 <code>password: root</code>」这个
+<strong>两行连续序列</strong>精确定位，且要求两行缩进相同。</p>
+<p>改完立刻用 YAML 解析器全仓库复验（8 个文件改动，0 个解析失败）。</p>
+<h3 id="config-prodyaml"><code>config/*-prod.yaml</code> 故意没改</h3>
+<p>它们用的是 Docker 主机名（<code>jdbc:mysql://db:3306/mall</code>、<code>nacos-registry:8848</code>），本地不加载。</p>
+<hr />
+<h2 id="5">5. 数据库</h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>实例</td>
+<td>MySQL <strong>8.0.43</strong> @ <code>127.0.0.1:3308</code></td>
+</tr>
+<tr>
+<td>schema</td>
+<td><code>mall</code></td>
+</tr>
+<tr>
+<td>表数量</td>
+<td><strong>76</strong></td>
+</tr>
+<tr>
+<td>数据</td>
+<td><code>document/sql/mall.sql</code>（76 CREATE TABLE + 1653 INSERT）</td>
+</tr>
+<tr>
+<td>账号</td>
+<td><code>root/123456</code>、<code>dev/dev123456</code>（对 <code>mall</code> 有全部权限）</td>
+</tr>
+<tr>
+<td>中文</td>
+<td>已抽查 <code>pms_product_category</code>：<code>服装</code> / <code>手机数码</code> / <code>家用电器</code> 正常</td>
+</tr>
+</tbody>
+</table>
+<p>这个 SQL 在 MySQL 8 上<strong>零不兼容</strong>（<code>utf8mb3</code> / <code>Aria</code> / <code>SEQUENCE</code> 等特征全为 0），
+和 P0 那个需要 <code>sed</code> 处理的 eladmin 形成对比。</p>
+<hr />
+<h2 id="6">6. 中间件现状</h2>
+<blockquote>
+<p><strong>全部就绪。</strong> 八个中间件都装好并各自做过端到端验证，
+<code>./svc.sh start full</code> 一条命令起全套。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>中间件</th>
+<th>端口</th>
+<th>状态</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nacos</td>
+<td>8848 / 8849 / 9848</td>
+<td>✅ 已装并验证</td>
+<td>见 <code>runtime.md</code></td>
+</tr>
+<tr>
+<td>MySQL 8</td>
+<td>3308</td>
+<td>✅</td>
+<td>76 张表已灌</td>
+</tr>
+<tr>
+<td>Redis</td>
+<td>6380</td>
+<td>✅</td>
+<td></td>
+</tr>
+<tr>
+<td>MongoDB</td>
+<td>27017</td>
+<td>✅ 已装并验证</td>
+<td>库名 <code>mall-port</code>，读写往返含中文已验</td>
+</tr>
+<tr>
+<td>Elasticsearch</td>
+<td>9200</td>
+<td>✅ 已装并验证</td>
+<td><strong>8.18.8</strong>（不是 7.17），索引写入/读回含中文已验</td>
+</tr>
+<tr>
+<td><strong>ES 插件 <code>analysis-ik</code></strong></td>
+<td>—</td>
+<td>✅ <strong>必须单独装</strong></td>
+<td>8.18.8；不装则 <strong>mall-search 起不来</strong>，见 §8 坑 7</td>
+</tr>
+<tr>
+<td>RabbitMQ</td>
+<td>5672 / 15672</td>
+<td>✅ 已装并验证</td>
+<td>Erlang 28.5.0.7 + RabbitMQ 4.3.6，见下</td>
+</tr>
+<tr>
+<td>MinIO</td>
+<td>9000 / 9001</td>
+<td>✅ 已装并验证</td>
+<td>走中国镜像装上的，见下</td>
+</tr>
+<tr>
+<td>Erlang/OTP</td>
+<td>4369 (epmd)</td>
+<td>✅</td>
+<td>RabbitMQ 的运行时</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>⚠️ <strong><code>analysis-ik</code> 是最容易被漏掉的一个。</strong> 它不在 <code>svc.sh</code> 的服务清单里
+（不是独立进程，而是 ES 的插件目录里多一个 <code>plugins/ik/</code>），
+所以「8 个服务全绿」并不代表它装了。缺它的症状是 <strong>mall-search 启动失败</strong>，
+报 <code>analyzer [ik_max_word] has not been configured in mappings</code>。
+校验一条命令：
+<code>bash
+curl -s http://127.0.0.1:9200/_cat/plugins?v      # 应出现 analysis-ik 8.18.8</code></p>
+</blockquote>
+<h3 id="rabbitmq">RabbitMQ 的三个要点</h3>
+<p><strong>① 只有 <code>mall-portal</code> 需要它。</strong> 这不是猜的 —— 全仓库 <code>spring-boot-starter-amqp</code>
+只有 <code>mall-portal/pom.xml</code> 一处命中：</p>
+<pre><code>$ grep -rl &quot;spring-boot-starter-amqp&quot; --include=&quot;pom.xml&quot; .
+./mall-portal/pom.xml
+</code></pre>
+<p>所以想省内存的话，不跑 mall-portal 就可以不启 RabbitMQ。</p>
+<p><strong>② 凭据和 vhost 必须对得上</strong>（来自 <code>config/portal/mall-portal-dev.yaml</code>）：</p>
+<pre><code class="language-yaml">rabbitmq:
+  host: localhost
+  port: 5672
+  virtual-host: /mall      # ← 注意是 /mall，不是 /
+  username: mall
+  password: mall
+</code></pre>
+<p><code>rabbitmq.conf</code> 里用 <code>default_user</code> / <code>default_pass</code> / <code>default_vhost</code>
+在首次启动时创建了这些。<strong>vhost 写错的现象很有欺骗性</strong> ——
+启动不报错，一发消息才 <code>access to vhost '/mall' refused</code>。</p>
+<p><strong>③ 验证脚本</strong>：<code>tools/p2-rabbitmq-test.py</code>
+跑的是 mall-portal 真正的订单超时取消链路（TTL 队列 + 死信转发），
+不是「端口通了」这种浅层检查。实测 <strong>11/11 通过</strong>。</p>
+<h3 id="minio">MinIO：之前记的「装不了」是错的</h3>
+<p><strong>官方源确实死了</strong>，<code>dl.min.io</code> 对所有开源构建返回 <strong>410 Gone</strong>：</p>
+<pre><code>410 Gone
+The open-source MinIO Server, MinIO Client (mc) and MinIO KES projects are
+archived and no longer maintained. ... These files are no longer served from
+this site. This applies to all community releases and to all hotfix builds.
+</code></pre>
+<p><strong>但中国镜像还活着</strong>：</p>
+<pre><code>https://dl.minio.org.cn/server/minio/release/windows-amd64/minio.exe   -&gt; 200
+https://dl.minio.org.cn/client/mc/release/windows-amd64/mc.exe         -&gt; 200
+</code></pre>
+<p>而且镜像提供 sha256 校验和，并且校验和文件里写明了对应的上游版本号，
+所以能确认拿到的是原版二进制（<code>minio.exe</code> 和 <code>mc.exe</code> 两个校验和都已核对一致）。</p>
+<p>已装好并配齐：</p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>endpoint</td>
+<td><code>http://127.0.0.1:9000</code></td>
+</tr>
+<tr>
+<td>控制台</td>
+<td><code>http://127.0.0.1:9001</code></td>
+</tr>
+<tr>
+<td>accessKey / secretKey</td>
+<td><code>minioadmin</code> / <code>minioadmin</code>（照 mall-admin 配置对齐）</td>
+</tr>
+<tr>
+<td>bucket</td>
+<td><code>mall</code>，已设公开读</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>bucket 其实是「可预建可不预建」的</strong>：<code>MinioController.upload</code> 里
+有 <code>bucketExists</code> → <code>makeBucket</code> 的逻辑，首次上传会自动建桶。
+但 <code>/minio/delete</code> <strong>不建桶</strong>，所以还是预建更稳。</p>
+<p><strong>验证脚本</strong>：<code>tools/p2-minio-test.py</code>，实测 <strong>13/13 通过</strong>
+（上传 → 读回 → 匿名 HTTP 直链 → 列举 → 删除，含中文文件名与内容）。</p>
+<p><strong>教训</strong>：一条下载路径失败 ≠ 这个软件不存在。
+当时只试了 <code>dl.min.io</code> 就下结论「拿不到」，没去试镜像站。</p>
+</blockquote>
+<hr />
+<h2 id="7">7. 启动顺序</h2>
+<p>服务发现和配置中心就绪后，模块之间<strong>没有严格的启动顺序要求</strong>（都是去 Nacos 注册），
+但按这个顺序起，日志里的报错最少：</p>
+<pre><code>1. gateway   (8201)  —— 入口
+2. admin     (8080)  —— 被 auth 通过 Feign 调用
+3. auth      (8401)  —— 依赖 admin/portal
+4. portal    (8085)
+5. search    (8081)
+6. demo      (8082)  —— 可选，纯演示
+7. monitor   (8101)  —— 可选，监控台
+</code></pre>
+<hr />
+<h2 id="8">8. ⚠️ 已知坑</h2>
+<h3 id="0-ddockerskiptrue">坑 0：不加 <code>-Ddocker.skip=true</code> 就构建不过（最容易误判的一个）</h3>
+<p>根 pom 的 <code>&lt;pluginManagement&gt;</code> 把 fabric8 的 <code>docker-maven-plugin</code> 的 <code>build</code> 目标
+<strong>绑到了 <code>package</code> 阶段</strong>，而且 <code>&lt;docker.host&gt;</code> 写死成<strong>原作者的内网地址</strong>：</p>
+<pre><code class="language-xml">&lt;docker.host&gt;http://192.168.3.101:2375&lt;/docker.host&gt;
+</code></pre>
+<p><code>admin / auth / gateway / monitor / portal / search</code> 这 6 个模块都显式声明了这个插件，
+于是只要本机没有那个 Docker 守护进程，<code>mvn package</code> 就在 <code>package</code> 阶段失败：</p>
+<pre><code>[INFO] --- spring-boot:3.5.14:repackage (repackage) @ mall-admin ---   ← 这行是成功的
+[INFO] --- docker:0.45.1:build (build-image) @ mall-admin ---          ← 这行挂了
+[ERROR] DOCKER&gt; Cannot create docker access object [192.168.3.101:2375 failed to respond]
+</code></pre>
+<p><strong>为什么特别容易误判</strong>：报错发生在编译和 repackage <strong>都成功之后</strong>，
+日志里最后一条成功信息是 <code>spring-boot:repackage</code>，很自然会怀疑是打包环节坏了。
+（我第一轮就把它错读成 <code>repackage</code> 报 <code>zip END header not found</code>，方向完全跑偏。）</p>
+<p><strong>为什么失败位置看起来「随机」</strong>：<code>mall-demo</code> 和 <code>mall-mbg</code> 没声明这个插件，
+所以它们能过、其它模块过不去。哪一轮先撞上，取决于当时哪个模块的 jar 被占用。</p>
+<p><strong>正确做法</strong>：</p>
+<pre><code class="language-bash">mvn -DskipTests -B -Ddocker.skip=true clean install
+</code></pre>
+<p><code>docker.skip</code> 是 fabric8 插件官方的跳过开关，比改 pom 干净。
+本工作区的 <code>./p2.sh build</code> 已经内置。</p>
+<h3 id="05-jvm-targetjar-clean">坑 0.5：残留 JVM 会锁住 <code>target/*.jar</code>，让 <code>clean</code> 失败</h3>
+<p>现象：</p>
+<pre><code>Failed to clean project: Failed to delete ...\mall-admin\target\mall-admin-1.0-SNAPSHOT.jar:
+另一个程序正在使用此文件，进程无法访问。
+</code></pre>
+<p>原因：上一次启动的模块还在跑，Windows 下运行中的 jar 被独占。
+<strong>这个坑和上面那个会互相伪装</strong> —— 我第一轮看到的 <code>zip END header not found</code>
+就是「jar 正在被另一个 JVM 读写」的副作用，不是 repackage 的 bug。</p>
+<p>排查与处置：</p>
+<pre><code class="language-bash"># 找出是谁占着端口（顺带就是占用 jar 的那个进程）
+netstat -ano | grep LISTENING | grep -E &quot;:(8201|8080|8401|8085|8081|8082|8101) &quot;
+# 或者直接看 java 进程
+tasklist //FI &quot;IMAGENAME eq java.exe&quot;
+
+# 用脚本停干净（按端口找 PID 并 taskkill /T，连带子进程）
+./p2.sh stop
+</code></pre>
+<p><strong>教训</strong>：构建失败时先确认「没有残留实例」，再去看 Maven 的报错。
+反过来做，就会像我一样对着一个假的 <code>repackage</code> 报错查半天。</p>
+<h3 id="06nacos-3x-v1">坑 0.6：Nacos 3.x 里 v1 目录接口已下线</h3>
+<p>想查「有哪些服务注册上来了」，用 v1 的目录接口会拿到：</p>
+<pre><code>HTTP 410  {&quot;message&quot;:&quot;Current API is deprecated, please use the new API&quot;}
+  /nacos/v1/ns/catalog/services
+</code></pre>
+<p><strong>但实例查询接口还是好的</strong>，直接用这个（不需要 token）：</p>
+<pre><code class="language-bash">curl -s &quot;http://127.0.0.1:8848/nacos/v1/ns/instance/list?serviceName=mall-admin&quot;
+</code></pre>
+<p>返回 <code>hosts[].ip/port/healthy</code>，能确认注册地址是 <code>127.0.0.1</code> 还是网卡地址 ——
+排查 Feign 超时时这条最有用。</p>
+<p>⚠️ 注意 <code>nacos.server.main.port</code> 是 <strong>8848</strong>（客户端 API），
+不是 8849（控制台）。带 <code>/nacos/v3/client/...</code> 的路径是不存在的，会 404。</p>
+<h3 id="1server__port-serverport-p0">坑 1：<code>SERVER__PORT</code> 劫持 <code>server.port</code>（和 P0 同源）</h3>
+<p>见 <code>run-p0.md</code> 第 5 节。<strong>P2 有 7 个模块，这个坑会一次咬 7 次</strong>，而且日志里的
+<code>Tomcat initialized with port 22407</code> 会让人以为是端口配置写错了。</p>
+<p>启动前 <code>source use-jdk.sh 17</code> 即可（该脚本已自动 <code>unset SERVER__PORT SERVER__HOST</code>）。</p>
+<h3 id="2">坑 2：改配置中心的东西不会自动生效到已启动的模块</h3>
+<p><code>?refreshEnabled=true</code> 只对<strong>标了 <code>@RefreshScope</code> 的 Bean</strong> 生效。
+改完 Nacos 里的配置，最省心的做法还是重启模块。</p>
+<h3 id="3nacos-8848nacos">坑 3：Nacos 控制台不是 <code>8848/nacos</code></h3>
+<p>见 <code>port-map.md</code> 的「修正一」。Nacos 3.x 控制台是<strong>独立端口 8849、根路径</strong>。</p>
+<h3 id="4_1">坑 4：模块名和端口很容易记混</h3>
+<p><code>mall-admin</code> 是 8080（管理后台），<code>mall-portal</code> 是 8085（用户端），
+<code>mall-search</code> 是 8081 —— <strong>8081 不是管理后台</strong>。
+拿不准就跑一遍：</p>
+<pre><code class="language-bash">grep -rn &quot;^  port:&quot; /d/java-workspace/p2-mall-swarm --include=&quot;application.yml&quot;
+</code></pre>
+<h3 id="5-logs-rabbitmq-p2">坑 5：环境变量 <code>LOGS</code> 会让 RabbitMQ 起不来（和 P2 配置无关）</h3>
+<p><code>mall-portal</code> 依赖 RabbitMQ，而 RabbitMQ 读的是一个名字就叫 <strong><code>LOGS</code></strong> 的环境变量
+（<strong>不是</strong> <code>RABBITMQ_LOGS</code>），并把它当成<strong>日志文件路径</strong>。叫 <code>LOGS</code> 的变量通常存的是<strong>目录</strong>，
+于是 broker 在 prelaunch 阶段、<strong>还没读到 <code>rabbitmq.conf</code></strong> 就崩：</p>
+<pre><code>BOOT FAILED
+failed to open log file at 'd:/java-workspace/.runtime/logs',
+reason: illegal operation on a directory
+</code></pre>
+<p>判据是报错里的路径<strong>是个目录</strong>。</p>
+<p>已做的处置：工作区所有启动脚本里日志目录变量统一改名（<code>svc.cmd</code> 里叫 <code>LOGDIR</code>，
+<code>run-rabbitmq.cmd</code> 里叫 <code>JW_LOGDIR</code>）。<strong>注意 <code>svc.cmd</code> 是用 <code>start</code> 拉起子进程的，
+父进程的整个环境会被继承</strong> —— 所以只要父脚本里出现名为 <code>LOGS</code> 的变量，同样会毒到 RabbitMQ。</p>
+<p>如果你自己另写脚本起 RabbitMQ，<strong>别在任何一层设 <code>LOGS</code></strong>。详见 <code>runtime.md</code> 的 ★ 块。</p>
+<h3 id="6rabbitmqctl">坑 6：<code>rabbitmqctl</code> 的两个小陷阱</h3>
+<ul>
+<li><strong>cookie 认 <code>HOMEDRIVE</code> + <code>HOMEPATH</code>，不认 <code>HOME</code></strong>（Windows 上，实测只设 <code>HOME</code> 无效）。
+  启动脚本已把 cookie 落到 <code>.runtime\data\rabbitmq\</code> 内；另外这个 cookie 文件的时间戳
+  <strong>恒为 <code>00:00:00</code></strong>，不能拿它判断新旧。</li>
+<li><strong>默认 vhost 是 <code>/mall</code> 不是 <code>/</code></strong>，查权限要带 <code>-p /mall</code>。</li>
+<li>★ <strong><code>-p /mall</code> 会被 Git Bash 当成路径改写掉。</strong> 直接这样写会失败：
+  <code>bash
+  bash svc.sh ctl rabbitmq list_queues -p /mall name messages
+  # 实际发出去的是：list_queues -p C:/Users/Administrator/.workbuddy-ai/.../mall
+  #   → Listing queues for vhost C:/Users/.../mall ...</code>
+  Git Bash 在把参数交给原生 Windows 程序时会做「路径自动转换」，
+  以 <code>/</code> 开头的参数一律被当成 Unix 绝对路径改写成 <code>C:/...</code>。
+  <strong>正确写法</strong>（二选一）：
+  <code>bash
+  MSYS_NO_PATHCONV=1 bash svc.sh ctl rabbitmq list_queues -p /mall name messages
+  bash svc.sh ctl rabbitmq list_queues -p //mall name messages     # 双斜杠也能挡住改写</code>
+  这个坑和 <code>svc.sh</code> 顶部注释里说的「为什么用 cmd 做实现、bash 只做转发」是同一族问题。</li>
+</ul>
+<hr />
+<h3 id="7mall-search-ik">坑 7：mall-search 起不来 —— 缺 IK 中文分词器插件</h3>
+<p><strong>现象</strong>：search 编译、启动日志都正常，最后却在建索引时炸掉，<code>APPLICATION FAILED TO START</code>：</p>
+<pre><code>Caused by: co.elastic.clients.elasticsearch._types.ElasticsearchException:
+  [es/indices.create] failed: [mapper_parsing_exception]
+  Failed to parse mapping: analyzer [ik_max_word] has not been configured in mappings
+</code></pre>
+<p><strong>根因</strong>：<code>EsProduct.java</code> 里三个字段标了 <code>@Field(analyzer = "ik_max_word")</code>：</p>
+<pre><code class="language-java">@Field(analyzer = &quot;ik_max_word&quot;, type = FieldType.Text)
+private String name;
+</code></pre>
+<p><code>ik_max_word</code> 是 <strong>IK 中文分词器</strong>提供的 analyzer，而 Elasticsearch 官方发行包<strong>不带</strong>它，
+必须单独装 <code>analysis-ik</code> 插件。Spring Data ES 在启动时会用实体上的映射去创建索引
+（<code>EsProductRepository</code> 的构造过程里就 <code>indices.create</code>），
+ES 发现 analyzer 不认识 → 拒绝建索引 → Bean 创建失败 → 应用退出。</p>
+<p><strong>注意这一步说明 ES 连接本身是通的</strong> —— 请求已经走到 <code>indices.create</code> 了。
+所以看到这个错不要往「ES 连不上」或「版本不匹配」的方向查。</p>
+<p><strong>修法</strong>（工作区已装好，记录在这里以便重建）：</p>
+<pre><code class="language-bash"># ① 下载：必须和 ES 版本严格一致
+curl -L -o .runtime/_dl/ik-8.18.8.zip \
+  https://release.infinilabs.com/analysis-ik/stable/elasticsearch-analysis-ik-8.18.8.zip
+
+# ② 解压到 plugins/ 下的一个子目录（目录名随意，习惯叫 ik）
+mkdir -p .runtime/elasticsearch/plugins/ik
+python -c &quot;import zipfile; zipfile.ZipFile('.runtime/_dl/ik-8.18.8.zip').extractall('.runtime/elasticsearch/plugins/ik')&quot;
+
+# ③ 重启 ES
+bash svc.sh stop elasticsearch &amp;&amp; bash svc.sh start elasticsearch
+</code></pre>
+<p><strong>校验</strong>（三条都要过）：</p>
+<pre><code class="language-bash"># ① 插件被加载
+curl -s http://127.0.0.1:9200/_cat/plugins?v
+#   name   component   version
+#   node-1 analysis-ik 8.18.8
+
+# ② 分词器真的能用
+curl -s -X POST http://127.0.0.1:9200/_analyze -H 'Content-Type: application/json' \
+  -d '{&quot;analyzer&quot;:&quot;ik_max_word&quot;,&quot;text&quot;:&quot;小米手机旗舰店&quot;}'
+#   ik_max_word -&gt; 小米 / 手机 / 旗舰店 / 旗舰 / 店     （细粒度，全切）
+#   ik_smart    -&gt; 小米 / 手机 / 旗舰店                 （粗粒度，少切）
+
+# ③ 索引建出来了
+curl -s &quot;http://127.0.0.1:9200/_cat/indices?v&quot;
+#   green open pms ...
+</code></pre>
+<p><strong>踩坑提示</strong>：<code>plugin-descriptor.properties</code> 里的 <code>elasticsearch.version</code> 必须和 ES 完全一致
+（这里是 <code>8.18.8</code>），差一个小版本 ES 会直接拒绝启动。
+GitHub 上的 <code>medcl/elasticsearch-analysis-ik</code> 与 <code>infinilabs/analysis-ik</code> 的 releases
+都<strong>没有</strong> v8.18.8 这个 tag（404），但 <code>release.infinilabs.com</code> 上有 —— 别因为 GitHub 404 就以为装不了。</p>
+<hr />
+<h3 id="8mall-demo-actuatorhealth-down-redis">坑 8：mall-demo 的 <code>/actuator/health</code> 是 DOWN —— 上游配置本身缺 Redis 块</h3>
+<p><strong>现象</strong>：demo 端口在听、<code>Started MallDemoApplication</code> 也打出来了，但健康检查整体是 <code>DOWN</code>：</p>
+<pre><code class="language-json">{&quot;status&quot;:&quot;DOWN&quot;,&quot;components&quot;:{
+  &quot;db&quot;:{&quot;status&quot;:&quot;UP&quot;},
+  &quot;redis&quot;:{&quot;status&quot;:&quot;DOWN&quot;,&quot;details&quot;:{
+    &quot;error&quot;:&quot;org.springframework.data.redis.RedisConnectionFailureException: Unable to connect to Redis&quot;}}
+}}
+</code></pre>
+<p><strong>根因</strong>：<code>mall-demo</code> 通过 <code>mall-mbg → mall-common</code> 拿到了 <code>spring-boot-starter-data-redis</code>，
+所以 Spring Boot 会自动装配 Redis 连接工厂并挂上 redis 健康指示器；
+但 <code>config/demo/mall-demo-dev.yaml</code> 里<strong>根本没有 <code>spring.data.redis</code> 配置块</strong>，
+于是走默认值 <strong><code>localhost:6379</code></strong> —— 而工作区的 Redis 在 <strong>6380</strong>。</p>
+<p><strong>这是上游仓库自身的缺口，不是我们改坏的</strong>：<code>mall-demo-dev.yaml.orig</code>（改动前备份）里也没有 redis 块。
+上游用 Docker 起 Redis 时 6379 是默认端口，所以原作者没暴露这个问题；
+我们把端口改成 6380 之后它才显形。</p>
+<p><strong>修法</strong>：给 <code>config/demo/mall-demo-dev.yaml</code> 补上 redis 块（与其它模块对齐），再重新发布：</p>
+<pre><code class="language-yaml">spring:
+  datasource:
+    url: jdbc:mysql://localhost:3308/mall?...
+    username: root
+    password: 123456
+  data:
+    redis:
+      host: localhost
+      database: 0
+      port: 6380
+      password:
+      timeout: 3000ms
+</code></pre>
+<pre><code class="language-bash">python tools/p2-publish-nacos-configs.py     # 重新发布到 Nacos
+./p2.sh stop demo &amp;&amp; ./p2.sh start demo      # 重启 demo
+curl -s http://127.0.0.1:8082/actuator/health   # 应为 UP，且 redis 组件 UP（version 8.10.2）
+</code></pre>
+<p><strong>顺带说明「为什么这个错值得查」</strong>：端口在听 + <code>Started ...</code> 打出来了，
+很容易以为「起来了就行」。但 actuator 聚合状态是 DOWN 意味着<strong>至少一个健康指示器在报错</strong>，
+对 demo 来说是 Redis、对 search 来说当初是 ES。<strong>每次启动完都应该看一眼 <code>/actuator/health</code></strong>，
+而不是只看端口。</p>
+<hr />
+<h3 id="9-per-message-ttl">坑 9：延迟队列「消息到期了却不转发」—— per-message TTL 的队头阻塞</h3>
+<p><strong>现象</strong>：订单 77 在 <code>normal_order_overtime=120</code> 时下单，消息进了 <code>mall.order.cancel.ttl</code>。
+随后把超时临时改成 1 分钟、又下了订单 78，<strong>等 80 秒后订单 78 状态仍是 0（没被取消）</strong>，
+而且队列消息数<strong>不降反升</strong>（2 → 3）。</p>
+<p><strong>根因</strong>：<code>mall.order.cancel.ttl</code> 是 <strong>classic 队列 + 逐消息 TTL</strong>（<code>expiration</code> 设在消息属性上，
+不是队列的 <code>x-message-ttl</code>）。classic 队列<strong>只从队头淘汰消息</strong> —— 队头那条 120 分钟 TTL 的消息
+没过期，排在它后面的 1 分钟消息<strong>永远轮不到被淘汰</strong>，也就不会死信转发。</p>
+<p>队列声明参数可以自证：</p>
+<pre><code>mall.order.cancel.ttl  arguments =
+  [{&quot;x-dead-letter-exchange&quot;,&quot;mall.order.direct&quot;},
+   {&quot;x-dead-letter-routing-key&quot;,&quot;mall.order.cancel&quot;},
+   {&quot;x-queue-type&quot;,&quot;classic&quot;}]        ← 没有 x-message-ttl，说明 TTL 是逐消息设的
+</code></pre>
+<p>绑定也是对的（<code>mall.order.direct.ttl → mall.order.cancel.ttl</code>、
+<code>mall.order.direct → mall.order.cancel</code>）—— <strong>所以「绑定正确」并不能推出「消息会转发」</strong>。</p>
+<p>这是 RabbitMQ 官方文档写明的 TTL 语义，<strong>不是 mall 的 bug，也不是环境问题</strong>。
+mall 上游固定用 120 分钟、队列里所有消息 TTL 一致，所以永远撞不上队头阻塞；
+只有我们为了做验证去动态改超时，才会造出「长 TTL 排在短 TTL 前面」这种组合。</p>
+<p><strong>复现/验证延迟队列的正确姿势</strong>（要么清空队列，要么让 TTL 单调递增）：</p>
+<pre><code class="language-bash"># ① 清空队列，消除队头阻塞
+MSYS_NO_PATHCONV=1 ./run-rabbitmq.cmd ctl purge_queue -p /mall mall.order.cancel.ttl
+
+# ② 把超时改成 1 分钟，下一单；下单后立刻确认队列里恰好 1 条
+MSYS_NO_PATHCONV=1 ./run-rabbitmq.cmd ctl list_queues -p /mall name messages
+#   mall.order.cancel.ttl  1        ← 必须是 1，多了就说明还有别的消息在队头
+
+# ③ 等 75 秒，队列应回到 0，订单 status 0 → 4
+</code></pre>
+<p><strong>教训</strong>：</p>
+<ul>
+<li><strong>「消息没转发」先看队头那条的 TTL，再看绑定。</strong> 绑定、死信参数全对，也可能一条都不动。</li>
+<li>生产上做延迟队列，<strong>不要用「classic 队列 + 逐消息 TTL」</strong>。三个正确选择：
+  ① <code>x-queue-type=quorum</code> + <strong>队列级</strong> <code>x-message-ttl</code>；
+  ② 装 <code>rabbitmq_delayed_message_exchange</code> 插件用延迟交换机；
+  ③ 按延迟档位拆成多个队列（每档 TTL 相同，天然没有队头阻塞）。</li>
+<li>排查时<strong>不要用 <code>messages</code> 一个数字判断</strong>，要连 <code>consumers</code> 和队列 <code>arguments</code> 一起看。</li>
+</ul>
+<hr />
+<h2 id="9-2026-09-28">9. 启动验证结果（2026-09-28 实测）</h2>
+<p><strong>一条命令复验全部结论</strong>（推荐以后每次改完配置都跑一遍）：</p>
+<pre><code class="language-bash">cd /d/java-workspace
+&quot;C:/Users/Administrator/.workbuddy-ai/binaries/python/envs/default/Scripts/python.exe&quot; \
+    tools/p2-e2e-test.py --rabbit-ctl &quot;D:\\java-workspace\\run-rabbitmq.cmd&quot;
+</code></pre>
+<p>它不看端口，而是<strong>用业务动作把每件中间件打一遍</strong>：7 个模块的 <code>/actuator/health</code>、
+Nacos 注册表、管理端登录+查商品、ES 导入+中文检索、会员登录+浏览记录读写、
+加购物车→算钱→下单→查队列深度。<strong>当前 27/27 通过。</strong></p>
+<h3 id="91">9.1 构建</h3>
+<pre><code class="language-bash">./p2.sh build
+</code></pre>
+<pre><code>mall-swarm .......... SUCCESS      mall-search ......... SUCCESS
+mall-common ......... SUCCESS      mall-portal ......... SUCCESS
+mall-mbg ............ SUCCESS      mall-monitor ........ SUCCESS
+mall-demo ........... SUCCESS      mall-gateway ........ SUCCESS
+mall-admin .......... SUCCESS      mall-auth ........... SUCCESS
+BUILD SUCCESS   （10 个模块，约 30 秒）
+</code></pre>
+<h3 id="92">9.2 七个模块逐个启动</h3>
+<pre><code class="language-bash">./p2.sh start
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>端口</th>
+<th>启动耗时</th>
+<th>日志中的证据</th>
+<th>health</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mall-gateway</td>
+<td>8201</td>
+<td>32.976 s</td>
+<td><code>Started MallGatewayApplication</code></td>
+<td>UP</td>
+</tr>
+<tr>
+<td>mall-admin</td>
+<td>8080</td>
+<td>40.119 s</td>
+<td><code>Started MallAdminApplication</code></td>
+<td>UP（db + redis）</td>
+</tr>
+<tr>
+<td>mall-auth</td>
+<td>8401</td>
+<td>23.600 s</td>
+<td><code>Started MallAuthApplication</code></td>
+<td>UP</td>
+</tr>
+<tr>
+<td>mall-portal</td>
+<td>8085</td>
+<td>38.536 s</td>
+<td><code>Started MallPortalApplication</code></td>
+<td>UP（db + redis）</td>
+</tr>
+<tr>
+<td>mall-search</td>
+<td>8081</td>
+<td>32.933 s</td>
+<td><code>Started MallSearchApplication</code></td>
+<td>UP（db）</td>
+</tr>
+<tr>
+<td>mall-demo</td>
+<td>8082</td>
+<td>34.070 s</td>
+<td><code>Started MallDemoApplication</code></td>
+<td>UP（db + redis）</td>
+</tr>
+<tr>
+<td>mall-monitor</td>
+<td>8101</td>
+<td>27.462 s</td>
+<td><code>Started MallMonitorApplication</code></td>
+<td>UP</td>
+</tr>
+</tbody>
+</table>
+<p><strong>7/7 UP，0 个 <code>APPLICATION FAILED TO START</code>。</strong></p>
+<h3 id="93-nacos">9.3 Nacos 注册表</h3>
+<pre><code class="language-bash">curl -s &quot;http://127.0.0.1:8848/nacos/v1/ns/service/list?pageNo=1&amp;pageSize=20&quot;
+</code></pre>
+<p>7 个服务全部注册：<code>mall-admin</code> <code>mall-auth</code> <code>mall-demo</code> <code>mall-gateway</code> <code>mall-monitor</code> <code>mall-portal</code> <code>mall-search</code>。</p>
+<h3 id="94">9.4 端到端业务链路</h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>链路</th>
+<th>请求</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>网关 → auth → Feign → admin → MySQL</td>
+<td><code>POST /mall-auth/auth/login?clientId=admin-app&amp;username=macro&amp;password=macro123</code></td>
+<td><code>code=200</code>，返回 183 字符 JWT</td>
+</tr>
+<tr>
+<td>2</td>
+<td>网关 → admin → MySQL → RBAC</td>
+<td><code>GET /mall-admin/product/list?pageNum=1&amp;pageSize=2</code>（带 token）</td>
+<td><code>code=200</code>，<code>total=20</code>，中文商品名正常</td>
+</tr>
+<tr>
+<td>3</td>
+<td>网关 → portal → MySQL</td>
+<td><code>GET /mall-portal/product/search?keyword=小米</code></td>
+<td><code>code=200</code>，命中 6 条</td>
+</tr>
+<tr>
+<td>4</td>
+<td>portal 会员登录 → Redis（sa-token）</td>
+<td><code>POST /mall-portal/sso/login?username=test&amp;password=123456</code></td>
+<td><code>code=200</code>，返回 JWT</td>
+</tr>
+<tr>
+<td>5</td>
+<td>portal → MongoDB 写</td>
+<td><code>POST /mall-portal/member/readHistory/create</code>（JSON body）</td>
+<td><code>code=200, data=1</code>；MongoDB 自动建出 <code>mall-port</code> 库</td>
+</tr>
+<tr>
+<td>6</td>
+<td>portal → MySQL（购物车）</td>
+<td><code>POST /mall-portal/cart/add</code>（JSON body，必须带 <code>price</code>）</td>
+<td><code>code=200</code>；落库 <code>oms_cart_item</code></td>
+</tr>
+<tr>
+<td>7</td>
+<td>portal → MongoDB 读</td>
+<td><code>GET /mall-portal/member/readHistory/list?pageNum=1&amp;pageSize=5</code></td>
+<td><code>code=200</code>，能读回刚写的记录</td>
+</tr>
+<tr>
+<td>8</td>
+<td>search → ES + IK</td>
+<td><code>POST /mall-search/esProduct/importAll</code> → <code>GET /mall-search/esProduct/search?keyword=小米</code></td>
+<td><code>data=20</code> 导入；检索命中 6 条，中文名完整</td>
+</tr>
+</tbody>
+</table>
+<p><strong>测试账号</strong></p>
+<table>
+<thead>
+<tr>
+<th>端</th>
+<th>账号</th>
+<th>密码</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>管理后台</td>
+<td><code>macro</code></td>
+<td><code>macro123</code></td>
+<td>超级管理员，登录时 <code>clientId=admin-app</code></td>
+</tr>
+<tr>
+<td>用户端</td>
+<td><code>test</code> / <code>windy</code> / <code>lisi</code></td>
+<td><code>123456</code></td>
+<td>种子数据里的会员，密码是 BCrypt</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>管理端登录：<code>POST /mall-auth/auth/login?clientId=admin-app&amp;username=macro&amp;password=macro123</code>
+用户端登录：<code>POST /mall-portal/sso/login?username=test&amp;password=123456</code>
+两者的 token 用法一样：<code>Authorization: Bearer &lt;token&gt;</code>。</p>
+</blockquote>
+<h3 id="95-4">9.5 完整下单链路（一次请求串起 4 个中间件）</h3>
+<p>这是最有说服力的一条 —— 一个真实业务动作同时用到了 <strong>MySQL + Redis + RabbitMQ + 服务发现</strong>：</p>
+<pre><code class="language-bash"># ① 会员登录（Redis 存 sa-token 会话）
+MT=$(curl -s -X POST &quot;http://127.0.0.1:8201/mall-portal/sso/login?username=test&amp;password=123456&quot; \
+     | python -c &quot;import json,sys;print(json.load(sys.stdin)['data']['token'])&quot;)
+
+# ② 生成订单（校验库存/优惠券 → 写 oms_order → 发延迟消息）
+curl -s -X POST &quot;http://127.0.0.1:8201/mall-portal/order/generateOrder&quot; \
+  -H &quot;Authorization: Bearer $MT&quot; -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;memberReceiveAddressId&quot;:4,&quot;useIntegration&quot;:0,&quot;payType&quot;:1,&quot;cartIds&quot;:[115]}'
+</code></pre>
+<p><strong>结果</strong>：</p>
+<pre><code class="language-json">{&quot;code&quot;:200,&quot;message&quot;:&quot;下单成功&quot;,&quot;data&quot;:{
+  &quot;order&quot;:{&quot;id&quot;:77,&quot;orderSn&quot;:&quot;202609280101000001&quot;,&quot;memberUsername&quot;:&quot;test&quot;, ...},
+  &quot;orderItemList&quot;:[{&quot;orderId&quot;:77,&quot;productId&quot;:27,&quot;productQuantity&quot;:4,
+                    &quot;realAmount&quot;:2024.2500,&quot;giftIntegration&quot;:2699, ...}]}}
+</code></pre>
+<p><strong>四个中间件各自的证据</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>中间件</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MySQL</td>
+<td><code>oms_order</code> 出现 <code>id=77, order_sn=202609280101000001, pay_amount=8097.00, status=0</code>；<code>oms_order_item</code> 出现对应行；购物车行 <code>115</code> 被软删（<code>delete_status=1</code>）</td>
+</tr>
+<tr>
+<td>Redis</td>
+<td>登录 token 的 sa-token 会话写在 6380，后续请求靠它鉴权</td>
+</tr>
+<tr>
+<td>RabbitMQ</td>
+<td><code>mall.order.cancel.ttl</code> 队列从 <strong>0 条变成 1 条</strong> —— 延迟取消消息发出去了</td>
+</tr>
+<tr>
+<td>Nacos</td>
+<td>请求经 8201 网关按 <code>lb://mall-portal</code> 路由过去</td>
+</tr>
+</tbody>
+</table>
+<p>延迟时长来自数据库，不是写死的：<code>oms_order_setting.normal_order_overtime = 120</code>（分钟），
+代码里 <code>delayTimes = orderSetting.getNormalOrderOvertime() * 60 * 1000</code>。
+所以这条消息会在 <code>mall.order.cancel.ttl</code> 里<strong>待 120 分钟</strong>，到期后死信转发到
+<code>mall.order.cancel</code>，由消费者把订单关掉（<code>status</code> 0 → 4）。</p>
+<blockquote>
+<p>想立刻看到死信转发，不用等 120 分钟 —— 改小 <code>normal_order_overtime</code> 再下一次单，
+或者直接用 <code>tools/p2-rabbitmq-test.py</code>（那个脚本把 TTL 设成秒级，11/11 通过）。</p>
+</blockquote>
+<h3 id="96">9.6 现象记录：中间件会被外部整批杀掉</h3>
+<p>验证过程中遇到过一次「8 个中间件<strong>同时</strong>从 LISTENING 变 stopped」，
+而 7 个 P2 模块<strong>依然在听</strong>（它们是 <code>nohup</code> 脱离的，中间件是 <code>cmd start</code> 拉起的）。
+Redis 日志里最后一条是<strong>成功的</strong> BGSAVE，之后没有任何 shutdown 记录 ⇒ 是被外部强杀，不是崩溃。</p>
+<p>当时的表现是业务接口突然报：</p>
+<pre><code>{&quot;code&quot;:500,&quot;message&quot;:&quot;Redis command timed out&quot;}
+</code></pre>
+<p><strong>处置</strong>：一条命令恢复全部中间件，P2 模块会自己重连（不用重启模块）：</p>
+<pre><code class="language-bash">bash svc.sh status        # 先确认到底哪些没了（不要只看端口，也不要凭印象）
+bash svc.sh start full    # 全部拉起，约 60 秒
+./p2.sh health            # 模块侧复查
+</code></pre>
+<p><strong>教训</strong>：
+- <strong>不要假设「刚才还在跑」就现在还在跑。</strong> 每次开始干活前先 <code>svc.sh status</code> + <code>./p2.sh status</code>。
+- <strong>报错先怀疑基础设施，再怀疑代码。</strong> <code>Redis command timed out</code> 的第一反应应该是
+  「Redis 还在不在」，而不是去读业务代码。
+- 中间件和模块的<strong>存活策略不一样</strong>：模块用 <code>nohup</code> 脱离会话，比中间件活得久。
+  所以会出现「模块在听、但中间件没了」这种半死状态 —— 端口在听不代表健康。</p>
+<h3 id="97">9.7 已知的非环境问题</h3>
+<p><code>POST /mall-portal/order/generateConfirmOrder</code> 传<strong>手工塞进去的</strong>购物车行
+（<code>price</code> 为 NULL 的那种）会 500：</p>
+<pre><code>java.lang.NullPointerException: Cannot invoke &quot;java.math.BigDecimal.subtract(...)&quot;
+because the return value of &quot;CartPromotionItem.getPrice()&quot; is null
+    at UmsMemberCouponServiceImpl.calcTotalAmount(UmsMemberCouponServiceImpl.java:217)
+</code></pre>
+<p>这是<strong>上游代码对脏数据不设防</strong>（没有价格就直接做减法），不是环境配置问题。</p>
+<p>注意 <code>/cart/add</code> <strong>不会自己算价格</strong> —— <code>OmsCartItemServiceImpl.add</code> 只把传进来的
+<code>OmsCartItem</code> 存下去，价格由前端给。所以用 curl 手工造购物车时<strong>必须带 <code>price</code></strong>，
+否则后续下单流程会在算钱那一步 NPE。补一条 SQL 就能继续：</p>
+<pre><code class="language-sql">UPDATE oms_cart_item SET price = 2699.00 WHERE id = 115;
+</code></pre>
+<h3 id="98-ttl">9.8 延迟取消闭环（TTL 到期 → 死信转发 → 消费者关单 → 库存回滚）</h3>
+<p>§9.5 只证明了「消息发出去了」。这一节证明<strong>后半段也通了</strong> —— 这是整个 P2 里
+唯一需要「等时间」才能看到的链路，也是 RabbitMQ 能力真正的落点。</p>
+<p><strong>实验设计</strong>：为了不等 120 分钟，把 <code>oms_order_setting.normal_order_overtime</code> 临时改成 <code>1</code>，
+并按坑 9 的要求<strong>先清空 TTL 队列</strong>（否则长 TTL 消息会堵住短 TTL 消息），
+使队列中只有本单这一条消息。</p>
+<p><strong>① 下单瞬间</strong>（<code>generateOrder</code>，17:39:01）</p>
+<pre><code class="language-json">{&quot;code&quot;:200,&quot;orderId&quot;:80,&quot;orderSn&quot;:&quot;202609280101000004&quot;,&quot;pay&quot;:18893.0,&quot;status&quot;:0}
+</code></pre>
+<pre><code>mall.order.cancel.ttl   messages=1  consumers=0     ← 延迟消息入队，恰好 1 条
+mall.order.cancel       messages=0  consumers=1     ← 消费者在等
+</code></pre>
+<p><strong>② TTL 到期后</strong>（17:40:01，正好 60 秒，误差 &lt;1s）</p>
+<pre><code>mall.order.cancel.ttl   messages=0  consumers=0     ← 消息已死信转发走
+mall.order.cancel       messages=0  consumers=1     ← 被消费者取走并处理
+</code></pre>
+<p>订单状态：</p>
+<pre><code>id  order_sn              status
+80  202609280101000004    4        ← 0(待付款) → 4(已关闭)
+</code></pre>
+<p><strong>③ mall-portal 日志（决定性证据）</strong></p>
+<pre><code>17:40:01.324 [tContainer#0-15] OmsOrderMapper.selectByExample
+             WHERE (id=? and status=? and delete_status=?)   → 80, 0, 0
+17:40:01.333 [tContainer#0-15] updateByPrimaryKeySelective oms_order
+             ... status = 4 ...                               &lt;== Updates: 1
+17:40:01.344 [tContainer#0-15] PortalOrderDao.releaseSkuStockLock
+             UPDATE pms_sku_stock SET lock_stock = lock_stock - ? WHERE id IN (?) → 7, 225
+17:40:01.347 [tContainer#0-15] CancelOrderReceiver : process orderId:80
+</code></pre>
+<p><strong>这条链路证明了四件事</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>结论</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>延迟消息按 TTL 精确到期</td>
+<td>17:39:01 入队 → 17:40:01 转发，TTL=60s 严丝合缝</td>
+</tr>
+<tr>
+<td>2</td>
+<td>死信按 <code>x-dead-letter-*</code> 正确路由</td>
+<td><code>.ttl</code> 队列 1→0，<code>mall.order.cancel</code> 消费掉</td>
+</tr>
+<tr>
+<td>3</td>
+<td>消费者真的在监听并执行业务</td>
+<td>线程名 <code>tContainer#0-15</code> 是 Spring AMQP 监听容器；日志打 <code>process orderId:80</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>关单会<strong>回滚库存锁</strong></td>
+<td><code>lock_stock - 7</code>，且 SQL 里 <code>WHERE status=0</code> 保证只取消未支付订单</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>顺带解释了 §9.5 里 <code>oms_cart_item.price</code> 为什么必须是手动补的：
+<code>OmsCartItemServiceImpl.add()</code> 是<strong>原样 insert</strong>，不查商品表补价格/商品名。
+真实前端是先调商品详情接口拿到 <code>price</code> 再一起提交的。所以 curl 手工造购物车
+必须自己带 <code>price</code>，否则 <code>handleRealAmount</code> / <code>calcTotalAmount</code> 会 NPE。</p>
+</blockquote>
+<p><strong>实验后已复原</strong>：<code>normal_order_overtime</code> 改回 <code>120</code>；订单 77/78/80 用
+<code>POST /order/cancelUserOrder?orderId=X</code> 关掉（它们的取消消息在清队列时被 purge 了，
+不会再有延迟消息兜底）；队列最终 <code>messages=0</code>。</p>
+  <div class="foot">渲染自 <code>docs/run-p2.md</code> · 2026-09-28</div>
+</div>
+</body>
+</html>
