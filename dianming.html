@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#FFE08A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>随机点名器</title>
+<style>
+  :root{
+    --yolk:#FFD43B;
+    --yolk-d:#EFA90A;
+    --ink:#2A2118;
+    --ink2:#7A6748;
+    --h:clamp(74px,21vw,104px);   /* 滚动条单格高度 */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;padding:0;}
+  body{
+    position:fixed;inset:0;overflow:hidden;
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(120% 70% at 50% -10%, #FFF6D8 0%, rgba(255,246,216,0) 62%),
+      linear-gradient(170deg,#FFFBF2 0%,#FFF3D6 45%,#FFE7A6 100%);
+    user-select:none;-webkit-user-select:none;
+    touch-action:manipulation;
+    overscroll-behavior:none;
+  }
+  #app{position:absolute;inset:0;overflow:hidden;}
+
+  #s-main{
+    position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:calc(env(safe-area-inset-top,0px) + 14px) 20px calc(env(safe-area-inset-bottom,0px) + 16px);
+    text-align:center;
+  }
+  .kicker{font-size:12.5px;font-weight:800;letter-spacing:3px;color:var(--ink2);margin:0 0 6px;}
+  .title{
+    margin:0;font-weight:900;letter-spacing:3px;line-height:1.15;
+    font-size:clamp(28px,9vw,42px);
+    text-shadow:0 3px 0 #fff, 0 8px 18px rgba(180,130,20,.20);
+  }
+  .title .br{color:var(--yolk-d);font-weight:700;opacity:.9;padding:0 2px;}
+
+  /* ---------- 滚动窗口 ---------- */
+  .reel{
+    position:relative;width:min(100%,380px);height:calc(var(--h) * 3);
+    margin-top:clamp(18px,4vh,32px);
+    border-radius:24px;overflow:hidden;
+    background:linear-gradient(180deg,#FFFDF6,#FFF4D8);
+    box-shadow:inset 0 2px 10px rgba(160,120,20,.14), 0 10px 26px rgba(150,105,20,.20),
+               0 0 0 3px #fff;
+  }
+  .reel::before,.reel::after{
+    content:"";position:absolute;left:0;right:0;height:34%;pointer-events:none;z-index:3;
+  }
+  .reel::before{top:0;background:linear-gradient(180deg,rgba(255,250,235,.98),rgba(255,250,235,0));}
+  .reel::after{bottom:0;background:linear-gradient(0deg,rgba(255,250,235,.98),rgba(255,250,235,0));}
+  .reel .band{
+    position:absolute;left:8px;right:8px;top:50%;transform:translateY(-50%);
+    height:var(--h);border-radius:16px;z-index:1;pointer-events:none;
+    background:rgba(255,212,59,.28);
+    box-shadow:0 0 0 2px rgba(239,169,10,.35) inset;
+  }
+  .strip{
+    position:absolute;left:0;right:0;top:0;will-change:transform;z-index:2;
+  }
+  .strip .it{
+    height:var(--h);display:flex;align-items:center;justify-content:center;
+    font-weight:900;letter-spacing:2px;white-space:nowrap;
+    font-size:clamp(26px,8.4vw,40px);color:#B9AC90;
+    transition:color .15s;
+  }
+  .strip .it.mid{color:#C2410C;text-shadow:0 2px 0 #fff;}
+
+  .btn{
+    -webkit-appearance:none;appearance:none;border:0;cursor:pointer;
+    font-family:inherit;font-weight:900;letter-spacing:2px;
+    border-radius:999px;color:#4A3200;
+    background:linear-gradient(180deg,#FFE071,#FFC61A);
+    box-shadow:0 7px 0 #D89A00, 0 12px 24px rgba(190,130,0,.30);
+    transition:transform .09s ease, box-shadow .09s ease;
+    font-size:clamp(19px,5.8vw,25px);padding:17px 0;width:min(100%,300px);
+    margin-top:clamp(18px,3.6vh,30px);
+  }
+  .btn:active{transform:translateY(5px);box-shadow:0 2px 0 #D89A00, 0 6px 12px rgba(190,130,0,.26);}
+  .btn[disabled]{opacity:.45;pointer-events:none;}
+  .tune{
+    margin-top:13px;border:0;background:rgba(255,255,255,.75);color:var(--ink2);
+    font-family:inherit;font-size:12.5px;font-weight:700;letter-spacing:1px;
+    padding:8px 16px;border-radius:999px;cursor:pointer;
+    box-shadow:0 2px 6px rgba(150,110,20,.14);
+  }
+
+  /* ---------- 结果层 ---------- */
+  #s-result{
+    position:absolute;inset:0;z-index:10;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:calc(env(safe-area-inset-top,0px) + 20px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);
+    background:rgba(255,250,235,.9);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    opacity:0;pointer-events:none;transition:opacity .28s ease;text-align:center;
+  }
+  #s-result.on{opacity:1;pointer-events:auto;}
+  #resultText{
+    margin:0;font-weight:900;letter-spacing:2px;line-height:1.22;
+    font-size:clamp(28px,9.4vw,48px);
+    text-shadow:0 3px 0 #fff, 0 8px 20px rgba(180,130,20,.24);
+  }
+  #resultText .l1{display:block;white-space:nowrap;}
+  #resultText .br{color:var(--yolk-d);font-weight:700;opacity:.9;padding:0 2px;}
+  #resultText .nm{color:#C2410C;}
+  #resultText .tail{display:block;font-size:.62em;color:var(--ink);letter-spacing:6px;margin-top:10px;}
+
+  .sticker{
+    background:#fff;border-radius:26px;padding:10px;border:4px solid #fff;line-height:0;
+    box-shadow:0 12px 30px rgba(140,100,20,.26), 0 0 0 2px rgba(255,255,255,.9) inset;
+    display:inline-block;width:clamp(140px,44vw,210px);
+    margin-top:clamp(20px,4.4vh,34px);
+  }
+  .sticker img{display:block;width:100%;height:auto;border-radius:18px;}
+
+  .pop-in{animation:popIn .5s cubic-bezier(.2,1.5,.45,1) both;}
+  @keyframes popIn{
+    0%{opacity:0;transform:scale(.4) rotate(-8deg);}
+    60%{opacity:1;transform:scale(1.08) rotate(3deg);}
+    100%{opacity:1;transform:scale(1) rotate(0);}
+  }
+  .rise-in{animation:riseIn .42s ease-out both;}
+  @keyframes riseIn{0%{opacity:0;transform:translateY(16px);}100%{opacity:1;transform:translateY(0);}}
+  .d1{animation-delay:.08s;}
+  .d2{animation-delay:.18s;}
+
+  /* ---------- 改名字 ---------- */
+  #s-edit{
+    position:absolute;inset:0;z-index:20;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:calc(env(safe-area-inset-top,0px) + 20px) 22px calc(env(safe-area-inset-bottom,0px) + 22px);
+    background:rgba(255,250,235,.94);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    opacity:0;pointer-events:none;transition:opacity .24s ease;
+  }
+  #s-edit.on{opacity:1;pointer-events:auto;}
+  .panel{
+    width:min(100%,380px);max-height:100%;overflow-y:auto;
+    background:#fff;border-radius:22px;padding:20px 18px;
+    box-shadow:0 14px 34px rgba(140,100,20,.22);
+  }
+  .panel h3{margin:0 0 4px;font-size:17px;letter-spacing:1px;}
+  .panel p{margin:0 0 12px;font-size:12.5px;color:var(--ink2);line-height:1.6;}
+  .panel textarea{
+    width:100%;min-height:130px;font-family:inherit;font-size:16px;font-weight:700;color:var(--ink);
+    padding:12px 14px;border-radius:12px;border:1.5px solid #EADFC2;background:#FFFDF7;
+    line-height:1.7;resize:none;-webkit-appearance:none;
+  }
+  .panel textarea:focus{outline:none;border-color:var(--yolk);background:#fff;}
+  .panel .row{display:flex;gap:10px;margin-top:16px;}
+  .panel .row button{
+    flex:1;border:0;font-family:inherit;font-weight:900;font-size:15px;letter-spacing:1px;
+    padding:13px 0;border-radius:999px;cursor:pointer;
+  }
+  .panel .ok{background:linear-gradient(180deg,#FFE071,#FFC61A);color:#4A3200;box-shadow:0 4px 0 #D89A00;}
+  .panel .no{background:#F4F1E8;color:var(--ink2);}
+  .panel .row button:active{transform:translateY(2px);}
+
+  @media (max-height:660px){
+    .reel{margin-top:12px;}
+    .btn{margin-top:14px;padding:14px 0;}
+    .sticker{width:clamp(112px,34vw,160px);margin-top:16px;}
+    .title{font-size:clamp(24px,7.6vw,34px);}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <section id="s-main">
+    <p class="kicker">随机点名</p>
+    <h1 class="title"><span class="br">{</span>谁被选中<span class="br">}</span></h1>
+
+    <div class="reel" id="reel">
+      <div class="band"></div>
+      <div class="strip" id="strip"></div>
+    </div>
+
+    <button class="btn" id="btnGo">开 始 点 名</button>
+    <button class="tune" id="btnTune">改名字</button>
+  </section>
+
+  <section id="s-result">
+    <h1 id="resultText"></h1>
+    <div class="sticker pop-in d1"><img id="resPic" alt="奶龙" draggable="false"></div>
+    <button class="btn rise-in d2" id="btnAgain">再点一次</button>
+  </section>
+
+  <section id="s-edit">
+    <div class="panel">
+      <h3>改名字</h3>
+      <p>一行一个，或用逗号隔开。最多 40 个，改完存在本机。</p>
+      <textarea id="editArea" placeholder="小天才&#10;大妈&#10;鱼头蛋挞"></textarea>
+      <div class="row">
+        <button class="no" id="btnEditCancel">取消</button>
+        <button class="ok" id="btnEditSave">保存</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var IMG = "data:image/webp;base64,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";
+  document.getElementById("resPic").src = IMG;
+
+  var MAXN = 40;
+  var DEFAULT_NAMES = ["小天才", "大妈", "鱼头蛋挞"];
+
+  function fromUrl(){
+    try{
+      var q = new URLSearchParams(location.search).get("n");
+      if(!q) return null;
+      var a = q.split(/[,，\n]/).map(function(s){ return s.trim(); }).filter(Boolean);
+      return a.length >= 2 ? a.slice(0, MAXN) : null;
+    }catch(e){ return null; }
+  }
+  function fromStore(){
+    try{
+      var raw = localStorage.getItem("rollcall_names");
+      if(!raw) return null;
+      var a = JSON.parse(raw);
+      return (a && a.length >= 2) ? a.slice(0, MAXN) : null;
+    }catch(e){ return null; }
+  }
+  var NAMES = fromUrl() || fromStore() || DEFAULT_NAMES.slice();
+
+  /* ---------- 音效 / 震动 ---------- */
+  var actx = null;
+  function audio(){
+    if(actx) return actx;
+    try{ actx = new (window.AudioContext || window.webkitAudioContext)(); }catch(e){ actx = null; }
+    return actx;
+  }
+  function beep(freq, dur, type, vol){
+    var a = audio(); if(!a) return;
+    try{
+      if(a.state === "suspended") a.resume();
+      var o = a.createOscillator(), g = a.createGain();
+      o.type = type || "triangle"; o.frequency.value = freq;
+      var t = a.currentTime, v = vol == null ? .07 : vol;
+      g.gain.setValueAtTime(v, t);
+      g.gain.exponentialRampToValueAtTime(.0001, t + dur);
+      o.connect(g); g.connect(a.destination);
+      o.start(t); o.stop(t + dur + .02);
+    }catch(e){}
+  }
+  function buzz(p){ try{ navigator.vibrate && navigator.vibrate(p); }catch(e){} }
+  var lastTick = 0;
+  function tick(){
+    var now = Date.now();
+    if(now - lastTick < 38) return;
+    lastTick = now;
+    beep(1450, .026, "square", .032);
+  }
+
+  /* ---------- 滚动条 ---------- */
+  var strip = document.getElementById("strip");
+  var reel = document.getElementById("reel");
+  var btnGo = document.getElementById("btnGo");
+  var ROUNDS = 9;                 // 名字重复多少轮
+  var H = 0;                      // 单格高度，由 CSS 变量算出
+  var idx = 0, rolling = false;
+
+  function unitH(){
+    var v = getComputedStyle(reel).getPropertyValue("--h").trim();
+    // --h 由 CSS clamp 给出，实际取第一格的高度最稳
+    var first = strip.firstChild;
+    return first ? first.getBoundingClientRect().height : (parseFloat(v) || 110);
+  }
+  function yFor(i, h){ return (1 - i) * h; }
+
+  function build(){
+    strip.innerHTML = "";
+    var total = (ROUNDS + 3) * NAMES.length;
+    for(var i = 0; i < total; i++){
+      var d = document.createElement("div");
+      d.className = "it";
+      d.textContent = NAMES[i % NAMES.length];
+      strip.appendChild(d);
+    }
+    H = unitH();
+    idx = NAMES.length;          // 初始停在第二轮，上方也有内容，不像空槽
+    strip.style.transition = "none";
+    strip.style.transform = "translateY(" + yFor(idx, H) + "px)";
+    markMid(idx);
+  }
+
+  function markMid(i){
+    var kids = strip.children;
+    for(var k = 0; k < kids.length; k++) kids[k].classList.remove("mid");
+    if(kids[i]) kids[i].classList.add("mid");
+  }
+
+  /* 滚动条位置会一直往下累加，快到头时重建一次；
+     重建后把 idx 归位到同一个名字上，画面完全不跳（名字是循环重复的）。 */
+  function recycle(){
+    var n = NAMES.length;
+    if(idx + ROUNDS * n + n < strip.children.length) return;
+    var keep = idx % n;
+    build();                       // 重建，build 里 idx = n
+    idx = n + keep;
+    strip.style.transition = "none";
+    strip.style.transform = "translateY(" + yFor(idx, H) + "px)";
+    markMid(idx);
+  }
+
+  function roll(){
+    if(rolling) return;
+    rolling = true;
+    btnGo.disabled = true;
+    audio();
+    recycle();
+    strip.style.transition = "none";
+
+    var n = NAMES.length;
+    var w = Math.floor(Math.random() * n);
+    var delta = ((w - (idx % n)) % n + n) % n;     // 让落点正好落在第 w 个名字上
+    var from = idx;
+    var to = idx + ROUNDS * n + delta;
+    var h = H || unitH();
+    H = h;
+
+    var DUR = 3400 + Math.random() * 500;
+    var start = performance.now();
+    var lastIdx = -1;
+
+    function ease(t){ return 1 - Math.pow(1 - t, 3.6); }
+
+    function frame(now){
+      var t = Math.min(1, (now - start) / DUR);
+      var cur = from + (to - from) * ease(t);
+      strip.style.transform = "translateY(" + yFor(cur, h) + "px)";
+      var ci = Math.round(cur);
+      if(ci !== lastIdx){ lastIdx = ci; tick(); markMid(ci); }
+      if(t < 1){ requestAnimationFrame(frame); }
+      else {
+        strip.style.transform = "translateY(" + yFor(to, h) + "px)";
+        markMid(to);
+        idx = to;
+        rolling = false;
+        btnGo.disabled = false;
+        finish(NAMES[w]);
+      }
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function finish(name){
+    var el = document.getElementById("resultText");
+    el.innerHTML = '<span class="l1"><span class="br">{</span><span class="nm"></span><span class="br">}</span></span>' +
+                   '<span class="tail">已被选中</span>';
+    el.querySelector(".nm").textContent = name;
+    fitText(el);
+
+    beep(660, .12, "triangle", .08);
+    setTimeout(function(){ beep(880, .12, "triangle", .08); }, 110);
+    setTimeout(function(){ beep(1170, .26, "triangle", .09); }, 230);
+    buzz([26, 55, 26, 55, 60]);
+    setTimeout(function(){ document.getElementById("s-result").classList.add("on"); }, 320);
+  }
+
+  function fitText(el){
+    var p = el.parentNode, cs = getComputedStyle(p);
+    var max = p.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 4;
+    var size = Math.min(48, window.innerWidth * 0.094);
+    el.style.fontSize = size + "px";
+    var guard = 0;
+    while(el.scrollWidth > max && size > 14 && guard < 60){
+      size -= 1.5; guard++;
+      el.style.fontSize = size + "px";
+    }
+  }
+
+  /* ---------- 交互 ---------- */
+  btnGo.addEventListener("click", roll);
+  reel.addEventListener("click", roll);
+  document.getElementById("btnAgain").addEventListener("click", function(){
+    document.getElementById("s-result").classList.remove("on");
+    beep(520, .09, "triangle", .05); buzz(10);
+  });
+
+  /* ---------- 改名字 ---------- */
+  var edit = document.getElementById("s-edit");
+  var area = document.getElementById("editArea");
+  document.getElementById("btnTune").addEventListener("click", function(){
+    area.value = NAMES.join("\n");
+    edit.classList.add("on");
+    beep(620, .07, "triangle", .05);
+  });
+  document.getElementById("btnEditCancel").addEventListener("click", function(){
+    edit.classList.remove("on"); beep(420, .07, "triangle", .05);
+  });
+  document.getElementById("btnEditSave").addEventListener("click", function(){
+    var vals = area.value.split(/[,，\n\r]+/).map(function(s){ return s.trim().slice(0, 10); }).filter(Boolean);
+    if(vals.length < 2){
+      beep(200, .18, "sawtooth", .06); buzz(30);
+      return;
+    }
+    NAMES = vals.slice(0, MAXN);
+    try{ localStorage.setItem("rollcall_names", JSON.stringify(NAMES)); }catch(e){}
+    build();
+    edit.classList.remove("on");
+    beep(880, .1, "triangle", .07); buzz(14);
+  });
+
+  /* ---------- 启动 ---------- */
+  build();
+  // --h 需要 CSS 先算出来，再量一次
+  setTimeout(function(){ H = unitH(); strip.style.transform = "translateY(" + yFor(idx, H) + "px)"; }, 60);
+  window.addEventListener("resize", function(){
+    H = unitH();
+    strip.style.transition = "none";
+    strip.style.transform = "translateY(" + yFor(idx, H) + "px)";
+    var t = document.getElementById("resultText");
+    if(t && t.textContent) fitText(t);
+  });
+  document.addEventListener("gesturestart", function(e){ e.preventDefault(); });
+  document.addEventListener("dblclick", function(e){ e.preventDefault(); }, { passive:false });
+})();
+</script>
+</body>
+</html>
